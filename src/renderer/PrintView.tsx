@@ -24,7 +24,7 @@ export function PrintView() {
       await Promise.all(Array.from(document.images).map((i) => i.decode().catch(() => undefined)));
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
       if (cancelled || !ref.current) return;
-      const rep = measurePage(ref.current, cv.style.spacing);
+      const rep = measurePage(ref.current, cv.style.margin);
       window.__cvPrintState = { ready: true, overflow: rep.sections.filter((s) => s.overflowMm > 0).map((s) => s.title) };
     })();
     return () => { cancelled = true; };

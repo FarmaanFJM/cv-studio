@@ -1,18 +1,24 @@
-// Datamodel + sanitizing. Pure TypeScript zodat zowel main, renderer als tests het gebruiken.
+// Datamodel (v2) + sanitizing. Pure TypeScript zodat main, renderer en tests het delen.
+import { isHex } from './color';
 
-export type TemplateId = 'sidebar' | 'minimal';
-export type FontId = 'inter' | 'source-sans' | 'lato' | 'merriweather';
-export type Spacing = 'compact' | 'normal' | 'ruim';
+export type TemplateId = 'sidebar' | 'header' | 'minimal';
+export type Zone = 'side' | 'main';
+export type PlaceTarget = Zone | 'hidden';
 export type PhotoShape = 'round' | 'square';
+export type SkillMode = 'flat' | 'grouped' | 'levels';
+export type ListDisplay = 'text' | 'list' | 'chips';
+export type LangDisplay = 'text' | 'dots';
+export type HeadingStyle = 'caps' | 'title' | 'plain';
+export type ItemLayout = 'inline' | 'dates-left';
 
 export const MIN_FONT_PT = 8;
-export const MAX_FONT_PT = 11.5;
+export const MAX_FONT_PT = 12;
 
 export interface Photo {
   src: string; // data URL (verkleind), blijft lokaal
-  aspect: number; // breedte / hoogte van de bron
-  zoom: number; // 1 = bedekt het vak precies
-  offsetX: number; // verschuiving in vakbreedtes t.o.v. gecentreerd
+  aspect: number;
+  zoom: number;
+  offsetX: number;
   offsetY: number;
   shape: PhotoShape;
   visible: boolean;
@@ -24,86 +30,55 @@ export interface Personal {
   email: string;
   phone: string;
   location: string;
+  birthDate: string; // vrije tekst; er wordt nooit een leeftijd berekend
   linkedin: string;
   github: string;
   website: string;
 }
 
-export interface ExperienceItem {
-  id: string;
-  role: string;
-  company: string;
-  location: string;
-  start: string;
-  end: string;
-  description: string;
-}
-export interface EducationItem {
-  id: string;
-  degree: string;
-  school: string;
-  start: string;
-  end: string;
-  description: string;
-}
-export interface ProjectItem {
-  id: string;
-  name: string;
-  tech: string;
-  period: string;
-  description: string;
-  github: string;
-}
-export interface SkillGroup {
-  id: string;
-  name: string;
-  skills: string[];
-}
-export interface LanguageItem {
-  id: string;
-  name: string;
-  level: string;
-}
-export interface CustomItem {
-  id: string;
-  text: string;
-}
+export interface ExperienceItem { id: string; role: string; company: string; location: string; start: string; end: string; description: string }
+export interface EducationItem { id: string; degree: string; school: string; start: string; end: string; description: string }
+export interface ProjectItem { id: string; name: string; tech: string; period: string; description: string; github: string }
+export interface SkillGroup { id: string; name: string; skills: string[]; level: number } // level 0–5 (stippen, alleen in niveau-modus)
+export interface LanguageItem { id: string; name: string; level: string; rating: number } // rating 0–5
+export interface CustomItem { id: string; text: string; value: string }
 
-export type SectionType =
-  | 'personal'
-  | 'profile'
-  | 'experience'
-  | 'education'
-  | 'projects'
-  | 'skills'
-  | 'languages'
-  | 'custom';
+export type SectionType = 'personal' | 'profile' | 'experience' | 'education' | 'projects' | 'skills' | 'languages' | 'custom';
 
-interface SectionBase {
-  id: string;
-  title: string;
-  visible: boolean;
-}
+interface SectionBase { id: string; title: string; visible: boolean; zone: Zone }
 export type Section =
   | (SectionBase & { type: 'personal' })
   | (SectionBase & { type: 'profile'; text: string })
   | (SectionBase & { type: 'experience'; items: ExperienceItem[] })
   | (SectionBase & { type: 'education'; items: EducationItem[] })
   | (SectionBase & { type: 'projects'; items: ProjectItem[] })
-  | (SectionBase & { type: 'skills'; groups: SkillGroup[] })
-  | (SectionBase & { type: 'languages'; items: LanguageItem[] })
-  | (SectionBase & { type: 'custom'; mode: 'text' | 'list'; text: string; items: CustomItem[] });
+  | (SectionBase & { type: 'skills'; mode: SkillMode; display: ListDisplay; groups: SkillGroup[] })
+  | (SectionBase & { type: 'languages'; display: LangDisplay; items: LanguageItem[] })
+  | (SectionBase & { type: 'custom'; mode: 'text' | 'list' | 'keyvalue'; text: string; items: CustomItem[] });
 
 export interface StyleSettings {
   accent: string;
-  font: FontId;
-  fontSize: number; // pt, basis voor lopende tekst
-  spacing: Spacing;
+  sidebarBg: string; // zijbalk / kopbalk
+  headingColor: string; // '' = accentkleur
+  textColor: string; // '' = standaard
+  dividerColor: string; // '' = standaard
+  font: string;
+  fontSize: number; // pt
+  lineHeight: number;
+  sectionGap: number; // mm
+  itemGap: number; // mm
+  margin: number; // mm
+  sidebarWidth: number; // mm
+  photoSize: number; // mm
+  headingStyle: HeadingStyle;
+  itemLayout: ItemLayout;
+  icons: boolean;
+  nameInSidebar: boolean;
 }
 
 export interface CV {
   id: string;
-  name: string; // naam van de versie, bijv. "Algemeen" of "ING"
+  name: string;
   createdAt: number;
   updatedAt: number;
   template: TemplateId;
@@ -114,19 +89,48 @@ export interface CV {
 }
 
 export interface AppState {
-  version: 1;
+  version: 2;
   activeId: string;
   cvs: CV[];
+  swatches: string[]; // eigen opgeslagen kleuren
 }
 
-export const FONTS: { id: FontId; label: string; css: string }[] = [
-  { id: 'inter', label: 'Inter', css: "'Inter', 'Segoe UI', Arial, sans-serif" },
-  { id: 'source-sans', label: 'Source Sans', css: "'Source Sans 3', 'Segoe UI', Arial, sans-serif" },
-  { id: 'lato', label: 'Lato', css: "'Lato', 'Segoe UI', Arial, sans-serif" },
-  { id: 'merriweather', label: 'Merriweather (serif)', css: "'Merriweather', Georgia, serif" }
+export interface FontDef { id: string; label: string; css: string; kind: 'sans' | 'serif' }
+export const FONTS: FontDef[] = [
+  { id: 'inter', label: 'Inter', css: "'Inter', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'source-sans', label: 'Source Sans 3', css: "'Source Sans 3', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'lato', label: 'Lato', css: "'Lato', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'open-sans', label: 'Open Sans', css: "'Open Sans', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'roboto', label: 'Roboto', css: "'Roboto', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'montserrat', label: 'Montserrat', css: "'Montserrat', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'nunito-sans', label: 'Nunito Sans', css: "'Nunito Sans', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'poppins', label: 'Poppins', css: "'Poppins', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'work-sans', label: 'Work Sans', css: "'Work Sans', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'dm-sans', label: 'DM Sans', css: "'DM Sans', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'ibm-plex-sans', label: 'IBM Plex Sans', css: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif", kind: 'sans' },
+  { id: 'merriweather', label: 'Merriweather', css: "'Merriweather', Georgia, serif", kind: 'serif' },
+  { id: 'pt-serif', label: 'PT Serif', css: "'PT Serif', Georgia, serif", kind: 'serif' },
+  { id: 'lora', label: 'Lora', css: "'Lora', Georgia, serif", kind: 'serif' },
+  { id: 'playfair', label: 'Playfair Display', css: "'Playfair Display', Georgia, serif", kind: 'serif' }
 ];
 
-export const ACCENTS = ['#1f4e79', '#0f766e', '#6d28d9', '#b91c1c', '#c2410c', '#334155', '#047857', '#be185d'];
+export const ACCENTS = ['#1f4e79', '#0f766e', '#00761f', '#6d28d9', '#b91c1c', '#c2410c', '#b8651f', '#e8a400', '#334155', '#be185d'];
+
+/** Kant-en-klare kleurthema's (accent + zijbalk). */
+export const THEMES: { name: string; accent: string; sidebarBg: string }[] = [
+  { name: 'Blauw', accent: '#00549a', sidebarBg: '#00549a' },
+  { name: 'Groen', accent: '#00761f', sidebarBg: '#00761f' },
+  { name: 'Oranje', accent: '#b8561f', sidebarBg: '#b8561f' },
+  { name: 'Geel', accent: '#c98a00', sidebarBg: '#f5b700' },
+  { name: 'Antraciet', accent: '#2b3138', sidebarBg: '#2b3138' },
+  { name: 'Paars', accent: '#5b2fa8', sidebarBg: '#5b2fa8' }
+];
+
+export const SPACING_PRESETS = {
+  compact: { sectionGap: 3.6, itemGap: 1.5, margin: 10 },
+  normal: { sectionGap: 5.6, itemGap: 2.4, margin: 13 },
+  ruim: { sectionGap: 7.6, itemGap: 3.4, margin: 15 }
+} as const;
 
 let counter = 0;
 export function uid(): string {
@@ -145,8 +149,18 @@ export const SECTION_TITLES: Record<SectionType, string> = {
   custom: 'Eigen onderdeel'
 };
 
+export const SKILL_LEVEL_NAMES = ['Beste', 'Goed', 'Bekend met', 'Interesse in'];
+
+export const defaultZone = (t: SectionType): Zone => (t === 'personal' || t === 'skills' || t === 'languages' ? 'side' : 'main');
+
 export const emptyPersonal = (): Personal => ({
-  fullName: '', title: '', email: '', phone: '', location: '', linkedin: '', github: '', website: ''
+  fullName: '', title: '', email: '', phone: '', location: '', birthDate: '', linkedin: '', github: '', website: ''
+});
+
+export const defaultStyle = (): StyleSettings => ({
+  accent: '#1f4e79', sidebarBg: '#1f4e79', headingColor: '', textColor: '', dividerColor: '',
+  font: 'inter', fontSize: 9.5, lineHeight: 1.4, sectionGap: 5.6, itemGap: 2.4, margin: 13, sidebarWidth: 70, photoSize: 40,
+  headingStyle: 'caps', itemLayout: 'inline', icons: true, nameInSidebar: false
 });
 
 export function newItem(type: 'experience'): ExperienceItem;
@@ -159,42 +173,100 @@ export function newItem(type: string): unknown {
     case 'experience': return { id, role: '', company: '', location: '', start: '', end: '', description: '' };
     case 'education': return { id, degree: '', school: '', start: '', end: '', description: '' };
     case 'projects': return { id, name: '', tech: '', period: '', description: '', github: '' };
-    default: return { id, name: '', level: '' };
+    default: return { id, name: '', level: '', rating: 0 };
   }
 }
 
-export function newCustomSection(): Section {
-  return { id: uid(), type: 'custom', title: 'Nieuw onderdeel', visible: true, mode: 'text', text: '', items: [] };
+export function newSkillGroup(name = '', level = 0): SkillGroup { return { id: uid(), name, skills: [], level }; }
+
+export interface SectionPreset { key: string; label: string; zone: Zone; make: () => Section }
+const custom = (title: string, zone: Zone, mode: 'text' | 'list' | 'keyvalue'): Section =>
+  ({ id: uid(), type: 'custom', title, visible: true, zone, mode, text: '', items: [] });
+
+export function newCustomSection(): Section { return custom('Nieuw onderdeel', 'main', 'text'); }
+
+/** Snelle voorbeelden voor extra onderdelen (vooral voor de zijbalk). */
+export const SECTION_PRESETS: SectionPreset[] = [
+  { key: 'interests', label: 'Interesses', zone: 'side', make: () => custom('Interesses', 'side', 'list') },
+  { key: 'certs', label: 'Certificaten', zone: 'side', make: () => custom('Certificaten', 'side', 'list') },
+  { key: 'links', label: 'Links', zone: 'side', make: () => custom('Links', 'side', 'keyvalue') },
+  { key: 'about', label: 'Over mij', zone: 'side', make: () => custom('Over mij', 'side', 'text') },
+  { key: 'extra', label: 'Extra informatie', zone: 'side', make: () => custom('Extra informatie', 'side', 'text') },
+  { key: 'stats', label: 'Gegevens / maten', zone: 'side', make: () => custom('Gegevens', 'side', 'keyvalue') },
+  { key: 'custom-main', label: 'Eigen onderdeel (hoofd)', zone: 'main', make: () => custom('Nieuw onderdeel', 'main', 'text') }
+];
+
+export function emptySection(type: SectionType): Section {
+  const base = { id: uid(), title: SECTION_TITLES[type], visible: true, zone: defaultZone(type) };
+  switch (type) {
+    case 'personal': return { ...base, type };
+    case 'profile': return { ...base, type, text: '' };
+    case 'experience': return { ...base, type, items: [] };
+    case 'education': return { ...base, type, items: [] };
+    case 'projects': return { ...base, type, items: [] };
+    case 'skills': return { ...base, type, mode: 'grouped', display: 'text', groups: [] };
+    case 'languages': return { ...base, type, display: 'text', items: [] };
+    default: return newCustomSection();
+  }
 }
 
-/**
- * Standaardvolgorde is gericht op een IT-stagecv: projecten en opleiding vóór (niet-technische) werkervaring.
- * De gebruiker kan de volgorde vrij aanpassen.
- */
+/** Standaardvolgorde: gericht op een IT-stagecv (projecten en opleiding vóór werkervaring). */
 export function createEmptyCv(name = 'Mijn cv'): CV {
   const now = Date.now();
   return {
-    id: uid(),
-    name,
-    createdAt: now,
-    updatedAt: now,
+    id: uid(), name, createdAt: now, updatedAt: now,
     template: 'sidebar',
-    style: { accent: ACCENTS[0], font: 'inter', fontSize: 9.5, spacing: 'normal' },
+    style: defaultStyle(),
     personal: emptyPersonal(),
     photo: null,
-    sections: [
-      { id: uid(), type: 'personal', title: SECTION_TITLES.personal, visible: true },
-      { id: uid(), type: 'profile', title: SECTION_TITLES.profile, visible: true, text: '' },
-      { id: uid(), type: 'projects', title: SECTION_TITLES.projects, visible: true, items: [] },
-      { id: uid(), type: 'education', title: SECTION_TITLES.education, visible: true, items: [] },
-      { id: uid(), type: 'experience', title: SECTION_TITLES.experience, visible: true, items: [] },
-      { id: uid(), type: 'skills', title: SECTION_TITLES.skills, visible: true, groups: [] },
-      { id: uid(), type: 'languages', title: SECTION_TITLES.languages, visible: true, items: [] }
-    ]
+    sections: (['personal', 'profile', 'projects', 'education', 'experience', 'skills', 'languages'] as const).map(emptySection)
   };
 }
 
-// ---------- sanitizing (bestanden van schijf / import zijn onbetrouwbaar) ----------
+// ---------- zones ----------
+
+/** In het minimale (eenkoloms) sjabloon bestaan zones niet: alles zichtbaars staat in één kolom. */
+export function zoneOf(cv: Pick<CV, 'template'>, s: Section): PlaceTarget {
+  if (!s.visible) return 'hidden';
+  return cv.template === 'minimal' ? 'main' : s.zone;
+}
+
+/** Verplaats een onderdeel naar een zone (of verborgen), optioneel vóór een ander onderdeel. */
+export function placeSection(sections: Section[], id: string, target: PlaceTarget, beforeId?: string): Section[] {
+  const idx = sections.findIndex((s) => s.id === id);
+  if (idx < 0) return sections;
+  const moved: Section = { ...sections[idx] } as Section;
+  if (target === 'hidden' && !beforeId) {
+    // verbergen verandert de volgorde niet, zodat "tonen" het onderdeel op dezelfde plek terugzet
+    return sections.map((s, i) => (i === idx ? { ...moved, visible: false } as Section : s));
+  }
+  if (target === 'hidden') moved.visible = false;
+  else { moved.visible = true; moved.zone = target; }
+  const rest = sections.filter((s) => s.id !== id);
+  let at = beforeId ? rest.findIndex((s) => s.id === beforeId) : -1;
+  if (at < 0) {
+    // achteraan in de doelgroep
+    const inTarget = rest.map((s, i) => ({ s, i })).filter(({ s }) => (target === 'hidden' ? !s.visible : s.visible && s.zone === target));
+    at = inTarget.length ? inTarget[inTarget.length - 1].i + 1 : rest.length;
+  }
+  rest.splice(at, 0, moved);
+  return rest;
+}
+
+/** Eén stap omhoog/omlaag binnen dezelfde (effectieve) zone. */
+export function moveInZone(sections: Section[], id: string, dir: -1 | 1, template: TemplateId): Section[] {
+  const idx = sections.findIndex((s) => s.id === id);
+  if (idx < 0) return sections;
+  const z = zoneOf({ template }, sections[idx]);
+  let j = idx + dir;
+  while (j >= 0 && j < sections.length && zoneOf({ template }, sections[j]) !== z) j += dir;
+  if (j < 0 || j >= sections.length) return sections;
+  const next = sections.slice();
+  [next[idx], next[j]] = [next[j], next[idx]];
+  return next;
+}
+
+// ---------- sanitizing (bestanden van schijf / import zijn onbetrouwbaar; ook migratie van v1) ----------
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown, max = 20000): string => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -204,6 +276,8 @@ const num = (v: unknown, d: number, min: number, max: number): number =>
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v.slice(0, 200) : []);
 const id = (v: unknown): string => (typeof v === 'string' && v ? v.slice(0, 64) : uid());
 const oneOf = <T extends string>(v: unknown, list: readonly T[], d: T): T => (list.includes(v as T) ? (v as T) : d);
+const color = (v: unknown, d: string) => (isHex(v) ? v.toLowerCase() : d);
+const optColor = (v: unknown) => (isHex(v) ? v.toLowerCase() : '');
 
 const IMG_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 const MAX_IMG_CHARS = 12_000_000;
@@ -223,57 +297,90 @@ function sanitizePhoto(v: unknown): Photo | null {
   };
 }
 
-const color = (v: unknown, d: string) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : d);
-
 function sanitizeSection(raw: unknown): Section | null {
   if (!isObj(raw)) return null;
   const type = raw.type;
-  const base = { id: id(raw.id), title: str(raw.title, 120), visible: bool(raw.visible, true) };
-  const t = (d: SectionType) => base.title || SECTION_TITLES[d];
-  switch (type) {
-    case 'personal': return { ...base, type, title: t('personal') };
-    case 'profile': return { ...base, type, title: t('profile'), text: str(raw.text) };
+  const known: SectionType[] = ['personal', 'profile', 'experience', 'education', 'projects', 'skills', 'languages', 'custom'];
+  if (!known.includes(type as SectionType)) return null;
+  const t = type as SectionType;
+  const base = {
+    id: id(raw.id),
+    title: str(raw.title, 120) || SECTION_TITLES[t],
+    visible: bool(raw.visible, true),
+    zone: oneOf(raw.zone, ['side', 'main'] as const, defaultZone(t))
+  };
+  switch (t) {
+    case 'personal': return { ...base, type: 'personal' };
+    case 'profile': return { ...base, type: 'profile', text: str(raw.text) };
     case 'experience':
-      return { ...base, type, title: t('experience'), items: arr(raw.items).filter(isObj).map((i) => ({
+      return { ...base, type: 'experience', items: arr(raw.items).filter(isObj).map((i) => ({
         id: id(i.id), role: str(i.role, 300), company: str(i.company, 300), location: str(i.location, 300),
         start: str(i.start, 60), end: str(i.end, 60), description: str(i.description) })) };
     case 'education':
-      return { ...base, type, title: t('education'), items: arr(raw.items).filter(isObj).map((i) => ({
+      return { ...base, type: 'education', items: arr(raw.items).filter(isObj).map((i) => ({
         id: id(i.id), degree: str(i.degree, 300), school: str(i.school, 300),
         start: str(i.start, 60), end: str(i.end, 60), description: str(i.description) })) };
     case 'projects':
-      return { ...base, type, title: t('projects'), items: arr(raw.items).filter(isObj).map((i) => ({
+      return { ...base, type: 'projects', items: arr(raw.items).filter(isObj).map((i) => ({
         id: id(i.id), name: str(i.name, 300), tech: str(i.tech, 500), period: str(i.period, 60),
         description: str(i.description), github: str(i.github, 500) })) };
     case 'skills':
-      return { ...base, type, title: t('skills'), groups: arr(raw.groups).filter(isObj).map((g) => ({
-        id: id(g.id), name: str(g.name, 200),
-        skills: arr(g.skills).filter((s): s is string => typeof s === 'string').map((s) => s.slice(0, 200)) })) };
+      return { ...base, type: 'skills',
+        mode: oneOf(raw.mode, ['flat', 'grouped', 'levels'] as const, 'grouped'),
+        display: oneOf(raw.display, ['text', 'list', 'chips'] as const, 'text'),
+        groups: arr(raw.groups).filter(isObj).map((g) => ({
+          id: id(g.id), name: str(g.name, 200), level: Math.round(num(g.level, 0, 0, 5)),
+          skills: arr(g.skills).filter((s): s is string => typeof s === 'string').map((s) => s.slice(0, 200)) })) };
     case 'languages':
-      return { ...base, type, title: t('languages'), items: arr(raw.items).filter(isObj).map((i) => ({
-        id: id(i.id), name: str(i.name, 200), level: str(i.level, 200) })) };
+      return { ...base, type: 'languages', display: oneOf(raw.display, ['text', 'dots'] as const, 'text'),
+        items: arr(raw.items).filter(isObj).map((i) => ({
+          id: id(i.id), name: str(i.name, 200), level: str(i.level, 200), rating: Math.round(num(i.rating, 0, 0, 5)) })) };
     case 'custom':
-      return { ...base, type, title: t('custom'), mode: raw.mode === 'list' ? 'list' : 'text', text: str(raw.text),
-        items: arr(raw.items).filter(isObj).map((i) => ({ id: id(i.id), text: str(i.text, 2000) })) };
-    default: return null;
+      return { ...base, type: 'custom', mode: oneOf(raw.mode, ['text', 'list', 'keyvalue'] as const, 'text'), text: str(raw.text),
+        items: arr(raw.items).filter(isObj).map((i) => ({ id: id(i.id), text: str(i.text, 2000), value: str(i.value, 2000) })) };
   }
+}
+
+const SPACING_V1 = { compact: SPACING_PRESETS.compact, normal: SPACING_PRESETS.normal, ruim: SPACING_PRESETS.ruim };
+
+function sanitizeStyle(raw: unknown): StyleSettings {
+  const s = isObj(raw) ? raw : {};
+  const d = defaultStyle();
+  const accent = color(s.accent, d.accent);
+  // v1-migratie: preset 'spacing' -> getallen; zijbalk kreeg de accentkleur
+  const legacy = typeof s.spacing === 'string' && s.spacing in SPACING_V1 ? SPACING_V1[s.spacing as keyof typeof SPACING_V1] : null;
+  return {
+    accent,
+    sidebarBg: color(s.sidebarBg, accent),
+    headingColor: optColor(s.headingColor),
+    textColor: optColor(s.textColor),
+    dividerColor: optColor(s.dividerColor),
+    font: FONTS.some((f) => f.id === s.font) ? (s.font as string) : d.font,
+    fontSize: num(s.fontSize, d.fontSize, MIN_FONT_PT, MAX_FONT_PT),
+    lineHeight: num(s.lineHeight, d.lineHeight, 1.2, 1.8),
+    sectionGap: num(s.sectionGap, legacy?.sectionGap ?? d.sectionGap, 2, 14),
+    itemGap: num(s.itemGap, legacy?.itemGap ?? d.itemGap, 0.5, 8),
+    margin: num(s.margin, legacy?.margin ?? d.margin, 6, 22),
+    sidebarWidth: num(s.sidebarWidth, d.sidebarWidth, 50, 100),
+    photoSize: num(s.photoSize, d.photoSize, 24, 60),
+    headingStyle: oneOf(s.headingStyle, ['caps', 'title', 'plain'] as const, d.headingStyle),
+    itemLayout: oneOf(s.itemLayout, ['inline', 'dates-left'] as const, d.itemLayout),
+    icons: bool(s.icons, d.icons),
+    nameInSidebar: bool(s.nameInSidebar, d.nameInSidebar)
+  };
 }
 
 /** Zet willekeurige JSON om in een geldige CV. Gooit alleen als het totaal geen cv-object is. */
 export function sanitizeCv(raw: unknown): CV {
   if (!isObj(raw)) throw new Error('Het bestand bevat geen geldig cv.');
   const base = createEmptyCv();
-  const style = isObj(raw.style) ? raw.style : {};
   const personal = isObj(raw.personal) ? raw.personal : {};
   let sections = arr(raw.sections).map(sanitizeSection).filter((s): s is Section => s !== null);
-  // ontbrekende standaardonderdelen aanvullen, dubbele ids voorkomen
   const seen = new Set<string>();
   sections = sections.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)));
-  if (!isObj(raw) || !Array.isArray(raw.sections)) sections = base.sections;
+  if (!Array.isArray(raw.sections)) sections = base.sections;
   for (const type of ['personal', 'profile', 'experience', 'education', 'projects', 'skills', 'languages'] as const) {
-    if (!sections.some((s) => s.type === type)) {
-      sections.push(base.sections.find((s) => s.type === type)!);
-    }
+    if (!sections.some((s) => s.type === type)) sections.push(base.sections.find((s) => s.type === type)!);
   }
   const now = Date.now();
   return {
@@ -281,17 +388,12 @@ export function sanitizeCv(raw: unknown): CV {
     name: str(raw.name, 120) || 'Mijn cv',
     createdAt: num(raw.createdAt, now, 0, 8.64e15),
     updatedAt: num(raw.updatedAt, now, 0, 8.64e15),
-    template: oneOf(raw.template, ['sidebar', 'minimal'] as const, 'sidebar'),
-    style: {
-      accent: color(style.accent, base.style.accent),
-      font: oneOf(style.font, FONTS.map((f) => f.id), 'inter'),
-      fontSize: num(style.fontSize, base.style.fontSize, MIN_FONT_PT, MAX_FONT_PT),
-      spacing: oneOf(style.spacing, ['compact', 'normal', 'ruim'] as const, 'normal')
-    },
+    template: oneOf(raw.template, ['sidebar', 'header', 'minimal'] as const, 'sidebar'),
+    style: sanitizeStyle(raw.style),
     personal: {
       fullName: str(personal.fullName, 200), title: str(personal.title, 200), email: str(personal.email, 200),
-      phone: str(personal.phone, 100), location: str(personal.location, 200), linkedin: str(personal.linkedin, 300),
-      github: str(personal.github, 300), website: str(personal.website, 300)
+      phone: str(personal.phone, 100), location: str(personal.location, 200), birthDate: str(personal.birthDate, 100),
+      linkedin: str(personal.linkedin, 300), github: str(personal.github, 300), website: str(personal.website, 300)
     },
     photo: sanitizePhoto(raw.photo),
     sections
@@ -309,7 +411,8 @@ export function sanitizeState(raw: unknown): AppState {
   const ids = new Set<string>();
   for (const c of cvs) { while (ids.has(c.id)) c.id = uid(); ids.add(c.id); }
   const activeId = isObj(raw) && typeof raw.activeId === 'string' && ids.has(raw.activeId) ? raw.activeId : cvs[0].id;
-  return { version: 1, activeId, cvs };
+  const swatches = isObj(raw) && Array.isArray(raw.swatches) ? raw.swatches.filter(isHex).map((c) => c.toLowerCase()).slice(0, 24) : [];
+  return { version: 2, activeId, cvs, swatches };
 }
 
 /** Kopie met nieuwe id's, zodat het origineel nooit wordt overschreven. */

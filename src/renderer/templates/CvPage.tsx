@@ -1,7 +1,7 @@
 import React, { forwardRef } from 'react';
-import { CV, FONTS } from '../../shared/model';
-import { SPACING } from '../layout';
-import { PhotoView, SectionBlock, contactRows } from './blocks';
+import { CV, FONTS, Section } from '../../shared/model';
+import { readableOn } from '../../shared/color';
+import { ContactList, PhotoView, SectionBlock, contactRows } from './blocks';
 
 interface Props {
   cv: CV;
@@ -9,71 +9,101 @@ interface Props {
   onPick?: (id: string) => void;
 }
 
-const SIDE_TYPES = new Set(['personal', 'skills', 'languages']);
-
 export const CvPage = forwardRef<HTMLDivElement, Props>(function CvPage({ cv, placeholders, onPick }, ref) {
-  const sp = SPACING[cv.style.spacing];
-  const font = FONTS.find((f) => f.id === cv.style.font)?.css ?? FONTS[0].css;
+  const st = cv.style;
+  const font = FONTS.find((f) => f.id === st.font)?.css ?? FONTS[0].css;
+  const sideFg = readableOn(st.sidebarBg);
   const style = {
-    '--accent': cv.style.accent,
-    '--fs': `${cv.style.fontSize}pt`,
+    '--accent': st.accent,
+    '--side-bg': st.sidebarBg,
+    '--side-fg': sideFg,
+    '--heading': st.headingColor || st.accent,
+    '--text': st.textColor || '#1f2933',
+    '--divider': st.dividerColor || '#d3d9e0',
+    '--fs': `${st.fontSize}pt`,
+    '--lh': st.lineHeight,
     '--font': font,
-    '--sec-gap': `${sp.sec}mm`,
-    '--item-gap': `${sp.item}mm`,
-    '--mar': `${sp.mar}mm`
+    '--sec-gap': `${st.sectionGap}mm`,
+    '--item-gap': `${st.itemGap}mm`,
+    '--mar': `${st.margin}mm`,
+    '--side-w': `${st.sidebarWidth}mm`,
+    '--photo': `${st.photoSize}mm`
   } as React.CSSProperties;
+  const cls = `cv-page t-${cv.template} hs-${st.headingStyle} il-${st.itemLayout}`;
 
   const name = cv.personal.fullName.trim();
   const title = cv.personal.title.trim();
   const photo = cv.photo && cv.photo.visible ? cv.photo : null;
-  const personalSec = cv.sections.find((s) => s.type === 'personal');
-  const showContact = personalSec?.visible !== false;
+  const personal = cv.sections.find((s) => s.type === 'personal');
+  const showContact = !!personal?.visible;
+  const pickPersonal = () => onPick?.(personal?.id ?? '');
 
-  const header = (
-    <header className="head" data-sec="header" data-title="Naam en functie" onClick={() => onPick?.(personalSec?.id ?? '')}>
+  const nameBlock = (
+    <header className="head" data-sec="header" data-title="Naam en functie" onClick={pickPersonal}>
       <h1 className={!name && placeholders ? 'ph' : ''}>{name || (placeholders ? 'Jouw naam' : '')}</h1>
       {(title || placeholders) && <div className={`job-title ${!title ? 'ph' : ''}`}>{title || 'Functietitel'}</div>}
     </header>
   );
+  const blocks = (list: Section[]) => list.map((s) => <SectionBlock key={s.id} s={s} cv={cv} onPick={onPick} />);
+  const visible = cv.sections.filter((s) => s.visible);
 
+  // ---------- Minimal: één kolom ----------
   if (cv.template === 'minimal') {
     const rows = showContact ? contactRows(cv) : [];
     return (
-      <div className="cv-page t-minimal" style={style} ref={ref}>
+      <div className={cls} style={style} ref={ref}>
         <div className="min-top">
           <div className="min-id">
-            {header}
+            {nameBlock}
             {rows.length > 0 && (
-              <div className="min-contact" data-sec={personalSec?.id} data-title={personalSec?.title} onClick={() => onPick?.(personalSec!.id)}>
-                {rows.map((r, i) => (
-                  <span key={r.label}>
-                    {i > 0 && <span className="sep"> | </span>}
-                    {r.link ? <a href={r.link} onClick={(e) => e.preventDefault()}>{r.value}</a> : r.value}
-                  </span>
-                ))}
+              <div className="min-contact" data-sec={personal!.id} data-title={personal!.title} onClick={pickPersonal}>
+                <ContactList cv={cv} />
               </div>
             )}
           </div>
           {photo && <PhotoView photo={photo} size="26mm" />}
         </div>
-        {cv.sections.filter((s) => s.type !== 'personal').map((s) => (
-          <SectionBlock key={s.id} s={s} cv={cv} variant="minimal" onPick={onPick} />
-        ))}
+        <div className="col-main">{blocks(visible.filter((s) => s.type !== 'personal'))}</div>
       </div>
     );
   }
 
-  const side = cv.sections.filter((s) => SIDE_TYPES.has(s.type) && (s.type !== 'personal' || showContact));
-  const main = cv.sections.filter((s) => !SIDE_TYPES.has(s.type));
+  // ---------- Header: brede kopbalk ----------
+  if (cv.template === 'header') {
+    const rest = visible.filter((s) => s.type !== 'personal');
+    const side = rest.filter((s) => s.zone === 'side');
+    const main = rest.filter((s) => s.zone === 'main');
+    return (
+      <div className={cls} style={style} ref={ref}>
+        <header className="band" data-sec="header" data-title="Kopbalk" onClick={pickPersonal}>
+          {photo && <PhotoView photo={photo} size="var(--photo)" />}
+          <div className="band-id">
+            <h1 className={!name && placeholders ? 'ph' : ''}>{name || (placeholders ? 'Jouw naam' : '')}</h1>
+            {(title || placeholders) && <div className={`job-title ${!title ? 'ph' : ''}`}>{title || 'Functietitel'}</div>}
+          </div>
+          {showContact && contactRows(cv).length > 0 && <div className="band-contact"><ContactList cv={cv} /></div>}
+        </header>
+        <div className={`hbody ${side.length ? '' : 'no-side'}`}>
+          {side.length > 0 && <aside className="col-side">{blocks(side)}</aside>}
+          <main className="col-main">{blocks(main)}</main>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Sidebar: sterke zijbalk links ----------
+  const side = visible.filter((s) => s.zone === 'side');
+  const main = visible.filter((s) => s.zone === 'main');
   return (
-    <div className="cv-page t-sidebar" style={style} ref={ref}>
-      <aside className="side">
-        {photo && <div className="side-photo" data-sec="photo" data-title="Foto"><PhotoView photo={photo} size="40mm" /></div>}
-        {side.map((s) => <SectionBlock key={s.id} s={s} cv={cv} variant="side" onPick={onPick} />)}
+    <div className={cls} style={style} ref={ref}>
+      <aside className="col-side side">
+        {photo && <div className="side-photo" data-sec="photo" data-title="Foto"><PhotoView photo={photo} size="var(--photo)" /></div>}
+        {st.nameInSidebar && nameBlock}
+        {blocks(side)}
       </aside>
-      <main className="main">
-        {header}
-        {main.map((s) => <SectionBlock key={s.id} s={s} cv={cv} variant="main" onPick={onPick} />)}
+      <main className="col-main main">
+        {!st.nameInSidebar && nameBlock}
+        {blocks(main)}
       </main>
     </div>
   );

@@ -1,14 +1,16 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { SECTION_TITLES } from '../shared/model';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { SECTION_TITLES, SPACING_PRESETS } from '../shared/model';
 import { api } from './api';
 import { useCvStore } from './store';
 import { FitReport, MM_PX, PAGE_H_MM, PAGE_W_MM, measurePage } from './layout';
 import { CvPage } from './templates/CvPage';
 import { SectionList } from './editor/SectionList';
-import { StylePanel } from './editor/StylePanel';
+import { LayoutPanel, StylePanel } from './editor/DesignPanels';
 import { Btn } from './editor/fields';
+import { Icon } from './icons';
 
 type Toast = { kind: 'ok' | 'error'; text: string } | null;
+type Tab = 'sections' | 'layout' | 'style';
 
 function PromptModal({ title, initial, onDone }: { title: string; initial: string; onDone: (v: string | null) => void }) {
   const [v, setV] = useState(initial);
@@ -26,17 +28,23 @@ function PromptModal({ title, initial, onDone }: { title: string; initial: strin
   );
 }
 
+const readWidth = () => {
+  try { const n = Number(localStorage.getItem('cv-editor-width')); if (n >= 380) return n; } catch { /* geen opslag */ }
+  return 600;
+};
+
 export function App() {
-  const { state, cv, status, updateCv, setActive, addCv, duplicate, importCv, removeCv } = useCvStore();
+  const { state, cv, status, updateCv, setActive, addCv, duplicate, importCv, removeCv, addSwatch } = useCvStore();
   const [openId, setOpenId] = useState<string | null>(null);
   const [fit, setFit] = useState<FitReport | null>(null);
   const [toast, setToast] = useState<Toast>(null);
   const [busy, setBusy] = useState(false);
   const [prompt, setPrompt] = useState<{ title: string; initial: string; resolve: (v: string | null) => void } | null>(null);
   const [scale, setScale] = useState(0.7);
+  const [editorW, setEditorW] = useState(readWidth);
   const paneRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<'sections' | 'style'>('sections');
+  const [tab, setTab] = useState<Tab>('sections');
 
   const ask = useCallback((title: string, initial: string) =>
     new Promise<string | null>((resolve) => setPrompt({ title, initial, resolve })), []);
@@ -51,9 +59,9 @@ export function App() {
     const el = paneRef.current;
     if (!el) return;
     const calc = () => {
-      const w = el.clientWidth - 48;
+      const w = el.clientWidth - 32;
       const h = el.clientHeight - 24;
-      setScale(Math.max(0.3, Math.min(w / (PAGE_W_MM * MM_PX), h / (PAGE_H_MM * MM_PX), 1.4)));
+      setScale(Math.max(0.3, Math.min(w / (PAGE_W_MM * MM_PX), h / (PAGE_H_MM * MM_PX), 1.6)));
     };
     calc();
     const ro = new ResizeObserver(calc);
@@ -61,10 +69,9 @@ export function App() {
     return () => ro.disconnect();
   }, [state === null]);
 
-  // meet na elke wijziging of de inhoud op één pagina past
   const measure = useCallback(() => {
     if (!pageRef.current || !cv) return;
-    const rep = measurePage(pageRef.current, cv.style.spacing);
+    const rep = measurePage(pageRef.current, cv.style.margin);
     pageRef.current.querySelectorAll('[data-sec]').forEach((el) => {
       const u = rep.sections.find((s) => s.id === (el as HTMLElement).dataset.sec);
       el.classList.toggle('is-over', !!u && u.overflowMm > 0);
@@ -81,12 +88,33 @@ export function App() {
     return () => { alive = false; imgs.forEach((i) => i.removeEventListener('load', measure)); };
   }, [measure, scale]);
 
+  // lettertypen die later laden kunnen de hoogte veranderen
+  useEffect(() => {
+    if (!cv) return;
+    const f = document.fonts;
+    const on = () => measure();
+    f.addEventListener?.('loadingdone', on);
+    return () => f.removeEventListener?.('loadingdone', on);
+  }, [cv, measure]);
+
   const pickFromPreview = useCallback((id: string) => {
     if (!id) return;
     setTab('sections');
     setOpenId(id);
-    window.setTimeout(() => document.querySelector(`[data-sec-id="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 30);
+    window.setTimeout(() => document.querySelector(`[data-sec-id="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 40);
   }, []);
+
+  const startResize = (e: React.PointerEvent) => {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => setEditorW(Math.max(400, Math.min(window.innerWidth * 0.7, ev.clientX)));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setEditorW((w) => { try { localStorage.setItem('cv-editor-width', String(Math.round(w))); } catch { /* geen opslag */ } return w; });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
 
   if (!state || !cv) return <div className="loading">Laden…</div>;
 
@@ -105,84 +133,73 @@ export function App() {
       notify({ kind: 'error', text: `Exporteren is mislukt: ${e instanceof Error ? e.message : e}` });
     } finally { setBusy(false); }
   };
-
   const exportJson = async () => {
     const r = await api.exportJson(cv);
-    if (r.ok) notify({ kind: 'ok', text: `Gegevens geëxporteerd: ${r.path}` });
+    if (r.ok) notify({ kind: 'ok', text: `Geëxporteerd: ${r.path}` });
     else if (!r.canceled) notify({ kind: 'error', text: r.error ?? 'Exporteren is mislukt.' });
   };
   const importJson = async () => {
     const r = await api.importJson();
-    if (r.ok) { importCv(r.cv); notify({ kind: 'ok', text: 'Cv geïmporteerd als nieuwe versie.' }); }
+    if (r.ok) { importCv(r.cv); notify({ kind: 'ok', text: 'Geïmporteerd als nieuwe versie.' }); }
     else if (!r.canceled) notify({ kind: 'error', text: r.error ?? 'Importeren is mislukt.' });
   };
-
-  const compact = () => updateCv((c) => { c.style.spacing = 'compact'; c.style.fontSize = Math.min(c.style.fontSize, 9); });
+  const compact = () => updateCv((c) => { Object.assign(c.style, SPACING_PRESETS.compact); c.style.fontSize = Math.min(c.style.fontSize, 9); });
 
   return (
-    <div className="app">
+    <div className="app" style={{ gridTemplateColumns: `${editorW}px 6px 1fr` }}>
       <section className="editor">
         <div className="editor-top">
-          <div className="brand">CV Studio</div>
+          <div className="brand"><i className="logo" />CV Studio</div>
           <div className="version-bar">
             <select className="input" data-testid="version-select" value={state.activeId} onChange={(e) => setActive(e.target.value)} aria-label="Cv-versie">
               {state.cvs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <Btn small name="cv-new" title="Nieuw leeg cv" onClick={async () => { const n = await ask('Naam van het nieuwe cv', 'Nieuw cv'); if (n) addCv(n); }}>Nieuw</Btn>
-            <Btn small name="cv-duplicate" title="Dupliceer dit cv" onClick={async () => { const n = await ask('Naam van de kopie', `${cv.name} (kopie)`); if (n) duplicate(n); }}>Dupliceren</Btn>
-            <Btn small name="cv-rename" onClick={async () => { const n = await ask('Nieuwe naam voor deze versie', cv.name); if (n) updateCv((c) => { c.name = n; }); }}>Hernoemen</Btn>
-            <Btn small kind="danger" name="cv-delete" disabled={state.cvs.length <= 1}
-              onClick={() => { if (confirm(`Cv "${cv.name}" definitief verwijderen?`)) removeCv(); }}>Verwijderen</Btn>
-          </div>
-          <div className="version-bar">
-            <Btn small name="json-export" onClick={exportJson}>Exporteer JSON</Btn>
-            <Btn small name="json-import" onClick={importJson}>Importeer JSON</Btn>
-            <span className={`save-status ${status}`} data-testid="save-status">
-              {status === 'saved' ? 'Alles opgeslagen' : status === 'saving' ? 'Opslaan…' : 'Opslaan mislukt'}
-            </span>
+            <Btn icon name="cv-new" title="Nieuw cv" onClick={async () => { const n = await ask('Naam van het nieuwe cv', 'Nieuw cv'); if (n) addCv(n); }}><Icon name="plus" /></Btn>
+            <Btn icon name="cv-duplicate" title="Dupliceren" onClick={async () => { const n = await ask('Naam van de kopie', `${cv.name} (kopie)`); if (n) duplicate(n); }}><Icon name="copy" /></Btn>
+            <Btn icon name="cv-rename" title="Hernoemen" onClick={async () => { const n = await ask('Nieuwe naam', cv.name); if (n) updateCv((c) => { c.name = n; }); }}><Icon name="edit" /></Btn>
+            <Btn icon kind="danger" name="cv-delete" title="Verwijderen" disabled={state.cvs.length <= 1}
+              onClick={() => { if (confirm(`Cv "${cv.name}" verwijderen?`)) removeCv(); }}><Icon name="trash" /></Btn>
+            <span className="vsep" />
+            <Btn icon name="json-export" title="Exporteer JSON" onClick={exportJson}><Icon name="download" /></Btn>
+            <Btn icon name="json-import" title="Importeer JSON" onClick={importJson}><Icon name="upload" /></Btn>
           </div>
         </div>
         <div className="tabs">
-          <button type="button" className={tab === 'sections' ? 'on' : ''} data-testid="tab-sections" onClick={() => setTab('sections')}>Onderdelen</button>
-          <button type="button" className={tab === 'style' ? 'on' : ''} data-testid="tab-style" onClick={() => setTab('style')}>Opmaak</button>
+          {([['sections', 'Inhoud'], ['layout', 'Layout'], ['style', 'Stijl']] as const).map(([k, label]) => (
+            <button type="button" key={k} className={tab === k ? 'on' : ''} data-testid={`tab-${k}`} onClick={() => setTab(k)}>{label}</button>
+          ))}
+          <span className={`save-status ${status}`} data-testid="save-status">
+            {status === 'saved' ? 'Alles opgeslagen' : status === 'saving' ? 'Opslaan…' : 'Opslaan mislukt'}
+          </span>
         </div>
         <div className="editor-scroll">
-          {tab === 'sections' ? (
-            <>
-              <p className="hint">Klik op een onderdeel (ook in de preview) om het te bewerken. Sleep ⠿ of gebruik de pijlen om de volgorde te wijzigen.
-                {cv.template === 'sidebar' && ' In het zijbalk-sjabloon staan gegevens, vaardigheden en talen links.'}</p>
-              <SectionList cv={cv} update={updateCv} fit={fit} openId={openId} setOpenId={setOpenId} />
-            </>
-          ) : (
-            <StylePanel cv={cv} update={updateCv} />
-          )}
+          {tab === 'sections' && <SectionList cv={cv} update={updateCv} fit={fit} openId={openId} setOpenId={setOpenId} />}
+          {tab === 'layout' && <LayoutPanel cv={cv} update={updateCv} />}
+          {tab === 'style' && <StylePanel cv={cv} update={updateCv} swatches={state.swatches} onSaveSwatch={addSwatch} />}
         </div>
       </section>
+
+      <div className="splitter" data-testid="splitter" onPointerDown={startResize} />
 
       <section className="preview">
         <div className="preview-top">
           <div className={`fit-badge ${fits ? 'ok' : 'bad'}`} data-testid="fit-badge">
-            {fits ? '✓ Past op één A4-pagina' : '⚠ Past niet op één pagina'}
+            {fits ? '✓ 1 pagina A4' : '⚠ Past niet op één pagina'}
           </div>
           <span className="spacer" />
           <button type="button" className="btn primary big" data-testid="export-pdf" disabled={!fits || busy}
-            title={fits ? 'Sla het cv op als PDF' : 'Maak het cv eerst korter: de inhoud past niet op één pagina'}
-            onClick={exportPdf}>
-            {busy ? 'Bezig…' : 'Exporteer PDF'}
+            title={fits ? 'Opslaan als PDF' : 'Inhoud past niet op één pagina'} onClick={exportPdf}>
+            <Icon name="pdf" /> {busy ? 'Bezig…' : 'Exporteer PDF'}
           </button>
         </div>
         {!fits && fit && (
           <div className="overflow-banner" role="alert" data-testid="overflow-banner">
-            <strong>De inhoud is {fit.overflowMm.toFixed(0)} mm te lang voor één A4-pagina.</strong>
             <div>
-              Dit komt uit de pagina:{' '}
-              {overSections.map((s) => s.title || SECTION_TITLES.custom).filter((t, i, a) => a.indexOf(t) === i).join(', ')}.
-              {biggest && <> Grootste onderdeel: <b>{biggest.title}</b> ({Math.round(biggest.heightMm)} mm).</>}
+              <strong>{fit.overflowMm.toFixed(0)} mm te lang.</strong>{' '}
+              Over de rand: {overSections.map((s) => s.title || SECTION_TITLES.custom).filter((t, i, a) => a.indexOf(t) === i).join(', ')}.
+              {biggest && <> Grootste: <b>{biggest.title}</b> ({Math.round(biggest.heightMm)} mm).</>}
             </div>
-            <div className="btn-row">
-              <Btn small onClick={compact}>Compactere opmaak toepassen</Btn>
-              <Btn small onClick={() => { setTab('sections'); }}>Inhoud inkorten of verbergen</Btn>
-            </div>
+            <Btn small onClick={compact}>Compacter</Btn>
           </div>
         )}
         {toast && <div className={`toast ${toast.kind}`} role="status" data-testid="toast" onClick={() => setToast(null)}>{toast.text}</div>}

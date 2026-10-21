@@ -85,5 +85,11 @@ export function useCvStore() {
     commit({ ...s, cvs: rest, activeId: rest[0].id });
   }, [commit]);
 
-  return { state, cv, status, updateCv, setActive, addCv, duplicate, importCv, removeCv };
+  const addSwatch = useCallback((hex: string) => {
+    const s = latest.current;
+    if (!s || s.swatches.includes(hex)) return;
+    commit({ ...s, swatches: [...s.swatches, hex].slice(-24) });
+  }, [commit]);
+
+  return { state, cv, status, updateCv, setActive, addCv, duplicate, importCv, removeCv, addSwatch };
 }

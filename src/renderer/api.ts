@@ -31,7 +31,7 @@ const browserApi: CvApi = {
       if (t) return sanitizeState(JSON.parse(t));
     } catch { /* ignore */ }
     const cv = createEmptyCv();
-    return { version: 1, activeId: cv.id, cvs: [cv] };
+    return { version: 2, activeId: cv.id, cvs: [cv], swatches: [] };
   },
   async saveState(s) { localStorage.setItem(KEY, JSON.stringify(s)); return { ok: true }; },
   saveStateSync(s) { localStorage.setItem(KEY, JSON.stringify(s)); return { ok: true }; },

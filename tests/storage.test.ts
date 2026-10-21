@@ -21,7 +21,7 @@ describe('CvStore (lokale JSON-opslag)', () => {
     const store = new CvStore(dir);
     const cv = demoCv();
     cv.template = 'minimal';
-    cv.style = { accent: '#0f766e', font: 'lato', fontSize: 10, spacing: 'compact' };
+    cv.style = { ...cv.style, accent: '#0f766e', font: 'lato', fontSize: 10, sectionGap: 4 };
     cv.sections.reverse();
     store.save({ version: 1, activeId: cv.id, cvs: [cv] });
     const back = new CvStore(dir).load();

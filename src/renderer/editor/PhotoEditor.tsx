@@ -74,8 +74,8 @@ export function PhotoEditor({ cv, update }: { cv: CV; update: (fn: (cv: CV) => v
       {!photo ? (
         <div className={`dropzone ${over ? 'over' : ''}`} onDragOver={(e) => { e.preventDefault(); setOver(true); }}
           onDragLeave={() => setOver(false)} onDrop={drop} onClick={() => input.current?.click()} data-testid="photo-drop">
-          <div>Sleep een foto hierheen</div>
-          <small>of klik om een bestand te kiezen (JPG, PNG, WebP)</small>
+          <div>Foto toevoegen</div>
+          <small>Slepen of klikken · JPG, PNG, WebP</small>
         </div>
       ) : (
         <div className="crop-row" onDragOver={(e) => e.preventDefault()} onDrop={drop}>
@@ -125,7 +125,6 @@ export function PhotoEditor({ cv, update }: { cv: CV; update: (fn: (cv: CV) => v
               <Btn small onClick={() => input.current?.click()}>Andere foto</Btn>
               <Btn small kind="danger" name="photo-remove" onClick={() => update((c) => { c.photo = null; })}>Verwijderen</Btn>
             </div>
-            <small className="muted">Sleep in het vak om te positioneren.</small>
           </div>
         </div>
       )}

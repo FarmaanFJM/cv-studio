@@ -1,14 +1,7 @@
-import { Spacing } from '../shared/model';
 
 export const PAGE_W_MM = 210;
 export const PAGE_H_MM = 297;
 export const MM_PX = 96 / 25.4;
-
-export const SPACING: Record<Spacing, { sec: number; item: number; mar: number; label: string }> = {
-  compact: { sec: 3.6, item: 1.5, mar: 10, label: 'Compact' },
-  normal: { sec: 5.6, item: 2.4, mar: 13, label: 'Normaal' },
-  ruim: { sec: 7.6, item: 3.4, mar: 15, label: 'Ruim' }
-};
 
 export interface SectionUsage {
   id: string;
@@ -24,11 +17,11 @@ export interface FitReport {
 }
 
 /** Meet alle [data-sec]-elementen in de pagina en vergelijkt ze met de onderrand van de pagina. */
-export function measurePage(page: HTMLElement, spacing: Spacing): FitReport {
+export function measurePage(page: HTMLElement, marginMm: number): FitReport {
   const rect = page.getBoundingClientRect();
   const scale = rect.width / (PAGE_W_MM * MM_PX) || 1;
   const toMm = (px: number) => px / scale / MM_PX;
-  const limit = rect.top + (PAGE_H_MM - SPACING[spacing].mar) * MM_PX * scale + 0.3 * MM_PX * scale;
+  const limit = rect.top + (PAGE_H_MM - marginMm) * MM_PX * scale + 0.3 * MM_PX * scale;
   const sections: SectionUsage[] = [];
   page.querySelectorAll<HTMLElement>('[data-sec]').forEach((el) => {
     const r = el.getBoundingClientRect();

@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
-import { CV, Section, SECTION_TITLES, SectionType, newCustomSection, uid } from '../../shared/model';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  CV, PlaceTarget, SECTION_PRESETS, SECTION_TITLES, Section, SectionType, emptySection, moveInZone, placeSection, zoneOf
+} from '../../shared/model';
+import { Icon } from '../icons';
 import { FitReport } from '../layout';
-import { Btn, Field, TextInput, move } from './fields';
+import { Btn, Field, TextInput } from './fields';
 import { SectionEditor } from './SectionEditors';
 
 interface Props {
@@ -14,96 +17,136 @@ interface Props {
 
 const STANDARD: SectionType[] = ['personal', 'profile', 'experience', 'education', 'projects', 'skills', 'languages'];
 
-function emptySection(type: SectionType): Section {
-  const base = { id: uid(), title: SECTION_TITLES[type], visible: true };
-  switch (type) {
-    case 'personal': return { ...base, type };
-    case 'profile': return { ...base, type, text: '' };
-    case 'experience': return { ...base, type, items: [] };
-    case 'education': return { ...base, type, items: [] };
-    case 'projects': return { ...base, type, items: [] };
-    case 'skills': return { ...base, type, groups: [] };
-    case 'languages': return { ...base, type, items: [] };
-    default: return newCustomSection();
-  }
+function AddMenu({ cv, onAdd }: { cv: CV; onAdd: (s: Section) => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const f = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', f);
+    return () => document.removeEventListener('mousedown', f);
+  }, [open]);
+  const missing = STANDARD.filter((t) => !cv.sections.some((s) => s.type === t));
+  const pick = (s: Section) => { onAdd(s); setOpen(false); };
+  return (
+    <div className="add-menu" ref={root}>
+      <Btn name="add-section" onClick={() => setOpen((o) => !o)}><Icon name="plus" size={14} /> Onderdeel</Btn>
+      {open && (
+        <div className="popover add-pop">
+          <div className="pop-title">Zijbalk</div>
+          {SECTION_PRESETS.filter((p) => p.zone === 'side').map((p) => (
+            <button type="button" key={p.key} data-testid={`add-${p.key}`} onClick={() => pick(p.make())}>{p.label}</button>
+          ))}
+          <div className="pop-title">Hoofdgedeelte</div>
+          {SECTION_PRESETS.filter((p) => p.zone === 'main').map((p) => (
+            <button type="button" key={p.key} data-testid={`add-${p.key}`} onClick={() => pick(p.make())}>{p.label}</button>
+          ))}
+          {missing.map((t) => (
+            <button type="button" key={t} data-testid={`add-std-${t}`} onClick={() => pick(emptySection(t))}>{SECTION_TITLES[t]}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SectionList({ cv, update, fit, openId, setOpenId }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
-  const missing = STANDARD.filter((t) => !cv.sections.some((s) => s.type === t));
+  const [overKey, setOverKey] = useState<string | null>(null);
+  const single = cv.template === 'minimal';
+  // in de kopbalk-template staat het contactblok vast in de kopbalk (geen zone)
+  const pinned = cv.template === 'header' ? cv.sections.find((s) => s.type === 'personal' && s.visible) : undefined;
+  const groups: { key: PlaceTarget; label: string }[] = single
+    ? [{ key: 'main', label: 'Volgorde' }, { key: 'hidden', label: 'Verborgen' }]
+    : [{ key: 'side', label: cv.template === 'header' ? 'Linkerkolom' : 'Zijbalk' }, { key: 'main', label: 'Hoofdgedeelte' }, { key: 'hidden', label: 'Verborgen' }];
 
-  const reorder = (from: string, to: string) => {
-    update((c) => {
-      const a = c.sections.findIndex((s) => s.id === from);
-      const b = c.sections.findIndex((s) => s.id === to);
-      if (a >= 0 && b >= 0 && a !== b) c.sections = move(c.sections, a, b);
-    });
+  const place = (id: string, target: PlaceTarget, beforeId?: string) => update((c) => { c.sections = placeSection(c.sections, id, target, beforeId); });
+  const drop = (target: PlaceTarget, beforeId?: string) => {
+    if (dragId && dragId !== beforeId) place(dragId, target, beforeId);
+    setDragId(null); setOverKey(null);
+  };
+
+  const card = (s: Section) => {
+    const u = fit?.sections.find((x) => x.id === s.id);
+    const open = openId === s.id;
+    const over = !!u && u.overflowMm > 0 && s.visible;
+    const z = zoneOf(cv, s);
+    const isPinned = pinned?.id === s.id;
+    return (
+      <div
+        key={s.id}
+        data-testid={`sec-${s.type}`}
+        data-sec-id={s.id}
+        className={`card ${open ? 'open' : ''} ${s.visible ? '' : 'hidden-sec'} ${over ? 'overflow' : ''} ${overKey === s.id && dragId !== s.id ? 'drop-target' : ''}`}
+        onDragOver={(e) => { if (dragId) { e.preventDefault(); e.stopPropagation(); setOverKey(s.id); } }}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); drop(z, s.id); }}
+      >
+        <div className="card-head" onClick={() => setOpenId(open ? null : s.id)}>
+          <span className="handle" draggable title="Slepen" onClick={(e) => e.stopPropagation()}
+            onDragStart={(e) => { setDragId(s.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.id); }}
+            onDragEnd={() => { setDragId(null); setOverKey(null); }}><Icon name="grip" size={16} /></span>
+          <span className="card-title">{s.type === 'personal' ? 'Persoonlijke gegevens' : s.title || SECTION_TITLES[s.type]}</span>
+          {s.visible && u && u.heightMm > 0 && <span className={`usage ${over ? 'bad' : ''}`} title="Ruimte">{Math.round(u.heightMm)} mm</span>}
+          <span className="spacer" />
+          <Btn small kind="ghost" icon name={`sec-${s.type}-up`} title="Omhoog" onClick={() => update((c) => { c.sections = moveInZone(c.sections, s.id, -1, c.template); })}><Icon name="up" size={14} /></Btn>
+          <Btn small kind="ghost" icon name={`sec-${s.type}-down`} title="Omlaag" onClick={() => update((c) => { c.sections = moveInZone(c.sections, s.id, 1, c.template); })}><Icon name="down" size={14} /></Btn>
+          {s.visible ? (
+            <>
+              {!single && !isPinned && (
+                <div className="seg zone-seg" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" className={s.zone === 'side' ? 'on' : ''} title="Naar zijbalk" data-testid={`sec-${s.type}-zone-side`}
+                    onClick={() => place(s.id, 'side')}>Links</button>
+                  <button type="button" className={s.zone === 'main' ? 'on' : ''} title="Naar hoofdgedeelte" data-testid={`sec-${s.type}-zone-main`}
+                    onClick={() => place(s.id, 'main')}>Hoofd</button>
+                </div>
+              )}
+              <Btn small kind="ghost" icon name={`sec-${s.type}-toggle`} title="Verbergen" onClick={() => place(s.id, 'hidden')}><Icon name="eyeoff" size={14} /></Btn>
+            </>
+          ) : (
+            <Btn small name={`sec-${s.type}-toggle`} title="Tonen" onClick={() => update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.visible = true; })}>Tonen</Btn>
+          )}
+        </div>
+        {open && (
+          <div className="card-body">
+            <Field label="Titel in cv">
+              <TextInput name="sec-title" value={s.title} onChange={(v) => update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.title = v; })} />
+            </Field>
+            <SectionEditor s={s} cv={cv} update={update} />
+            {s.type !== 'personal' && (
+              <div className="card-foot">
+                <Btn kind="danger" small name={`sec-${s.type}-delete`}
+                  onClick={() => { if (confirm(`"${s.title}" verwijderen?`)) update((c) => { c.sections = c.sections.filter((x) => x.id !== s.id); }); }}>
+                  <Icon name="trash" size={14} /> Verwijderen
+                </Btn>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
     <div className="sections" data-testid="section-list">
-      {cv.sections.map((s, idx) => {
-        const u = fit?.sections.find((x) => x.id === s.id);
-        const open = openId === s.id;
-        const over = !!u && u.overflowMm > 0 && s.visible;
+      {pinned && (
+        <div className="zone zone-pinned" data-testid="zone-head">
+          <div className="zone-title">Kopbalk</div>
+          {card(pinned)}
+        </div>
+      )}
+      {groups.map((g) => {
+        const list = cv.sections.filter((s) => zoneOf(cv, s) === g.key && s.id !== pinned?.id);
         return (
-          <div
-            key={s.id}
-            data-testid={`sec-${s.type}`}
-            data-sec-id={s.id}
-            className={`card ${open ? 'open' : ''} ${s.visible ? '' : 'hidden-sec'} ${over ? 'overflow' : ''} ${overId === s.id && dragId !== s.id ? 'drop-target' : ''}`}
-            onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverId(s.id); } }}
-            onDrop={(e) => { e.preventDefault(); if (dragId) reorder(dragId, s.id); setDragId(null); setOverId(null); }}
-          >
-            <div className="card-head" onClick={() => setOpenId(open ? null : s.id)}>
-              <span className="handle" draggable title="Sleep om de volgorde te wijzigen"
-                onClick={(e) => e.stopPropagation()}
-                onDragStart={(e) => { setDragId(s.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.id); }}
-                onDragEnd={() => { setDragId(null); setOverId(null); }}>⠿</span>
-              <span className="card-title">{s.type === 'personal' ? 'Persoonlijke gegevens' : s.title || SECTION_TITLES[s.type]}</span>
-              {s.visible && u && u.heightMm > 0 && (
-                <span className={`usage ${over ? 'bad' : ''}`} title="Ruimte op de pagina">{Math.round(u.heightMm)} mm</span>
-              )}
-              {!s.visible && <span className="usage muted-badge">verborgen</span>}
-              <span className="spacer" />
-              <button type="button" className="icon-btn" title="Omhoog" data-testid={`sec-${s.type}-up`} disabled={idx === 0}
-                onClick={(e) => { e.stopPropagation(); update((c) => { c.sections = move(c.sections, idx, idx - 1); }); }}>↑</button>
-              <button type="button" className="icon-btn" title="Omlaag" data-testid={`sec-${s.type}-down`} disabled={idx === cv.sections.length - 1}
-                onClick={(e) => { e.stopPropagation(); update((c) => { c.sections = move(c.sections, idx, idx + 1); }); }}>↓</button>
-              <button type="button" className={`icon-btn eye ${s.visible ? 'on' : ''}`} data-testid={`sec-${s.type}-toggle`}
-                title={s.visible ? 'Verbergen in cv' : 'Tonen in cv'} aria-pressed={s.visible}
-                onClick={(e) => { e.stopPropagation(); update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.visible = !t.visible; }); }}>
-                {s.visible ? 'Zichtbaar' : 'Verborgen'}
-              </button>
-            </div>
-            {open && (
-              <div className="card-body">
-                <Field label="Titel in cv">
-                  <TextInput name="sec-title" value={s.title} onChange={(v) => update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.title = v; })} />
-                </Field>
-                <SectionEditor s={s} cv={cv} update={update} />
-                {s.type !== 'personal' && (
-                  <div className="card-foot">
-                    <Btn kind="danger" small name={`sec-${s.type}-delete`}
-                      onClick={() => { if (confirm(`Onderdeel "${s.title}" verwijderen?`)) update((c) => { c.sections = c.sections.filter((x) => x.id !== s.id); }); }}>
-                      Onderdeel verwijderen
-                    </Btn>
-                  </div>
-                )}
-              </div>
-            )}
+          <div key={g.key} className={`zone zone-${g.key} ${overKey === `zone-${g.key}` ? 'drop-target' : ''}`} data-testid={`zone-${g.key}`}
+            onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverKey(`zone-${g.key}`); } }}
+            onDrop={(e) => { e.preventDefault(); drop(g.key); }}>
+            <div className="zone-title">{g.label}<span className="count">{list.length}</span></div>
+            {list.map(card)}
+            {list.length === 0 && <div className="zone-empty">—</div>}
           </div>
         );
       })}
-      <div className="add-section">
-        <Btn name="add-custom" onClick={() => { const n = newCustomSection(); update((c) => { c.sections.push(n); }); setOpenId(n.id); }}>+ Eigen onderdeel</Btn>
-        {missing.map((t) => (
-          <Btn key={t} small kind="ghost" onClick={() => { const n = emptySection(t); update((c) => { c.sections.push(n); }); setOpenId(n.id); }}>
-            + {SECTION_TITLES[t]}
-          </Btn>
-        ))}
-      </div>
+      <AddMenu cv={cv} onAdd={(n) => { update((c) => { c.sections.push(n); }); setOpenId(n.id); }} />
     </div>
   );
 }

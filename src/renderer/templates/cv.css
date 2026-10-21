@@ -5,79 +5,136 @@
   box-sizing: border-box;
   position: relative;
   background: #fff;
-  color: #1f2933;
+  color: var(--text);
   font-family: var(--font);
   font-size: var(--fs);
-  line-height: 1.4;
+  line-height: var(--lh);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
   overflow-wrap: anywhere;
   word-break: normal;
+  --muted: color-mix(in srgb, var(--text) 62%, #fff);
 }
 .cv-page * { box-sizing: border-box; min-width: 0; }
 .cv-page h1, .cv-page h2, .cv-page p, .cv-page ul { margin: 0; padding: 0; }
 .cv-page a { color: inherit; text-decoration: none; }
-.cv-page .ph { color: #b4bcc6; }
+.cv-page .ph { opacity: 0.4; }
 
 .cv-page .head h1 { font-size: 2.35em; line-height: 1.12; font-weight: 700; letter-spacing: -0.01em; }
-.cv-page .job-title { font-size: 1.2em; color: var(--accent); font-weight: 600; margin-top: 0.8mm; }
+.cv-page .job-title { font-size: 1.2em; color: var(--heading); font-weight: 600; margin-top: 0.8mm; }
 
+/* ----- koppen ----- */
 .cv-page .sec { margin-top: var(--sec-gap); }
-.cv-page .sec h2 {
-  font-size: 0.98em; text-transform: uppercase; letter-spacing: 0.09em; font-weight: 700;
-  color: var(--accent); margin-bottom: 1.8mm;
-}
+.cv-page .sec h2 { color: var(--heading); margin-bottom: 1.8mm; font-weight: 700; }
+.hs-caps .sec h2 { font-size: 0.98em; text-transform: uppercase; letter-spacing: 0.09em; border-bottom: 0.25mm solid var(--divider); padding-bottom: 0.9mm; }
+.hs-title .sec h2 { font-size: 1.4em; line-height: 1.2; display: flex; align-items: center; gap: 3mm; margin-bottom: 2.2mm; }
+.hs-title .sec h2::after { content: ''; flex: 1; height: 0.25mm; background: var(--divider); }
+.hs-plain .sec h2 { font-size: 1.12em; }
+
+/* ----- items ----- */
 .cv-page .item { margin-top: var(--item-gap); break-inside: avoid; }
 .cv-page .item:first-of-type { margin-top: 0; }
 .cv-page .row { display: flex; justify-content: space-between; gap: 4mm; align-items: baseline; }
 .cv-page .strong { font-weight: 700; }
-.cv-page .dates { color: #5b6672; font-size: 0.92em; white-space: nowrap; flex-shrink: 0; }
-.cv-page .sub { color: #3d4a57; font-style: italic; }
-.cv-page .sub.tech { font-style: normal; color: var(--accent); font-size: 0.94em; }
-.cv-page .proj-link { font-size: 0.92em; color: var(--accent); }
+.cv-page .dates { color: var(--muted); font-size: 0.92em; white-space: nowrap; flex-shrink: 0; }
+.cv-page .sub { color: color-mix(in srgb, var(--text) 82%, #fff); font-style: italic; }
+.cv-page .sub.tech { font-style: normal; color: var(--heading); font-size: 0.94em; }
+.cv-page .proj-link { font-size: 0.92em; color: var(--heading); }
 .cv-page .rich p { margin-top: 0.8mm; }
 .cv-page .rich ul { margin-top: 0.8mm; padding-left: 4.2mm; }
 .cv-page .rich li { margin-top: 0.4mm; padding-left: 0.4mm; }
 .cv-page .rich > :first-child { margin-top: 0.8mm; }
+
+/* datums links, inhoud rechts (alleen in de hoofdkolom) */
+.il-dates-left .col-main .item { display: grid; grid-template-columns: 30mm 1fr; column-gap: 4mm; }
+.il-dates-left .col-main .item .row { display: contents; }
+.il-dates-left .col-main .item .dates { grid-column: 1; grid-row: 1; white-space: normal; color: var(--heading); font-weight: 600; }
+.il-dates-left .col-main .item .strong { grid-column: 2; grid-row: 1; }
+.il-dates-left .col-main .item > :not(.row) { grid-column: 2; }
+
+/* ----- foto ----- */
 .photo { position: relative; overflow: hidden; background: #d8dee6; flex-shrink: 0; }
 .photo.round { border-radius: 50%; }
 .photo img { position: absolute; max-width: none; max-height: none; display: block; user-select: none; }
 
-/* ---------- Template A: zijbalk ---------- */
-.t-sidebar { display: grid; grid-template-columns: 70mm 1fr; }
-.t-sidebar .side {
-  background: var(--accent); color: #fff; padding: var(--mar) 7mm var(--mar) 8mm;
-  height: 297mm;
-}
+/* ----- contact ----- */
+.cv-page .contact-row { display: flex; gap: 2.4mm; align-items: flex-start; margin-top: 1.7mm; }
+.cv-page .contact-row:first-child { margin-top: 0; }
+.cv-page .ic { width: 1.1em; height: 1.1em; flex: none; margin-top: 0.14em; }
+.cv-page .lbl { display: block; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.75; }
+.cv-page .contact:not(.with-icons) .contact-row { display: block; }
+
+/* ----- vaardigheden / talen / overig ----- */
+.cv-page .skill-group { margin-top: 2mm; }
+.cv-page .skill-group:first-child { margin-top: 0; }
+.cv-page .skill-name { font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 3mm; }
+.cv-page .skill-ul { padding-left: 4mm; }
+.cv-page .chips { display: flex; flex-wrap: wrap; gap: 1mm; margin-top: 0.6mm; }
+.cv-page .chip { padding: 0.25mm 2.2mm; border-radius: 3mm; background: color-mix(in srgb, var(--heading) 12%, #fff); font-size: 0.94em; }
+.cv-page .dots { display: inline-flex; gap: 0.9mm; flex: none; }
+.cv-page .dot { display: block; width: 1.9mm; height: 1.9mm; border-radius: 50%; background: currentColor; opacity: 0.28; }
+.cv-page .dot.on { opacity: 1; }
+.cv-page .lang { margin-top: 0.8mm; display: flex; justify-content: space-between; align-items: center; gap: 3mm; }
+.cv-page .lang:first-child { margin-top: 0; }
+.cv-page .lang .level { opacity: 0.85; }
+.cv-page .kv { display: flex; gap: 3mm; margin-top: 0.8mm; }
+.cv-page .kv:first-child { margin-top: 0; }
+.cv-page .kv .k { font-weight: 700; }
+.cv-page .kv .v:only-child { font-weight: 400; }
+.cv-page .custom-list { padding-left: 4.2mm; }
+.cv-page .custom-list li { margin-top: 0.6mm; }
+
+/* ----- zijbalk-stijl (Sidebar-sjabloon, en tekst op gekleurde vlakken) ----- */
+.t-sidebar { display: grid; grid-template-columns: var(--side-w) 1fr; }
+.t-sidebar .side { background: var(--side-bg); color: var(--side-fg); padding: var(--mar) 7mm var(--mar) 8mm; height: 297mm; }
 .t-sidebar .main { padding: var(--mar) var(--mar) var(--mar) 9mm; height: 297mm; }
 .t-sidebar .side-photo { display: flex; justify-content: center; margin-bottom: 1mm; }
-.t-sidebar .side .photo { border: 0.8mm solid rgba(255,255,255,0.85); }
-.t-sidebar .side .sec h2 { color: #fff; border-bottom: 0.3mm solid rgba(255,255,255,0.5); padding-bottom: 1mm; }
-.t-sidebar .side .contact-row { margin-top: 1.6mm; }
-.t-sidebar .side .contact-row:first-child { margin-top: 0; }
-.t-sidebar .side .lbl { display: block; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.78; }
-.t-sidebar .side .val { display: block; }
-.t-sidebar .side .skill-group { margin-top: 2mm; }
-.t-sidebar .side .skill-group:first-child { margin-top: 0; }
-.t-sidebar .side .skill-name { font-weight: 700; }
-.t-sidebar .side .skill-list { opacity: 0.95; }
-.t-sidebar .side .lang { margin-top: 0.8mm; }
-.t-sidebar .side .level { opacity: 0.85; }
-.t-sidebar .side .rich ul { padding-left: 4mm; }
-.t-sidebar .main .head { padding-bottom: 2.5mm; border-bottom: 0.5mm solid var(--accent); }
-.t-sidebar .main .sec:first-of-type { margin-top: calc(var(--sec-gap) * 0.9); }
-.t-sidebar .main .sec h2 { border-bottom: 0.25mm solid #cfd6de; padding-bottom: 0.9mm; }
+.t-sidebar .side .photo { border: 0.8mm solid rgba(255, 255, 255, 0.85); }
+.t-sidebar .side .head { text-align: center; margin-top: 4mm; }
+.t-sidebar .side .head h1 { font-size: 1.75em; color: var(--side-fg); }
+.t-sidebar .side .job-title { color: var(--side-fg); font-weight: 400; opacity: 0.92; }
+.t-sidebar .main .head { padding-bottom: 2.5mm; border-bottom: 0.5mm solid var(--heading); }
+.t-sidebar .main .sec:first-of-type, .t-sidebar .main .head + .sec { margin-top: calc(var(--sec-gap) * 0.9); }
+.t-sidebar .main .contact { display: flex; flex-wrap: wrap; gap: 1.2mm 6mm; }
+.t-sidebar .main .contact-row { margin-top: 0; }
 
-/* ---------- Template B: minimal (ATS) ---------- */
+.t-sidebar .side .sec h2, .t-header .band h2 { color: var(--side-fg); }
+.t-sidebar.hs-caps .side .sec h2 { border-bottom-color: color-mix(in srgb, var(--side-fg) 45%, transparent); }
+.t-sidebar.hs-title .side .sec h2::after { background: color-mix(in srgb, var(--side-fg) 55%, transparent); }
+.t-sidebar .side .chip { background: color-mix(in srgb, var(--side-fg) 18%, transparent); }
+.t-sidebar .side .sub, .t-sidebar .side .dates, .t-sidebar .side .proj-link, .t-sidebar .side .sub.tech { color: color-mix(in srgb, var(--side-fg) 85%, transparent); }
+
+/* ----- Header-sjabloon: brede kopbalk ----- */
+.t-header { display: flex; flex-direction: column; }
+.t-header .band { background: var(--side-bg); color: var(--side-fg); padding: calc(var(--mar) * 0.8) var(--mar); display: flex; align-items: center; gap: 7mm; }
+.t-header .band .photo { border: 0.8mm solid rgba(255, 255, 255, 0.9); }
+.t-header .band-id { flex: 1; }
+.t-header .band h1 { font-size: 2.2em; line-height: 1.1; font-weight: 700; color: var(--side-fg); }
+.t-header .band .job-title { color: var(--side-fg); font-weight: 400; opacity: 0.92; }
+.t-header .band-contact { text-align: right; max-width: 62mm; }
+.t-header .band-contact .contact-row { justify-content: flex-end; margin-top: 1mm; }
+.t-header .band-contact .contact-row .val { order: 0; }
+.t-header .band-contact .ic { order: 1; }
+.t-header .hbody { flex: 1; display: grid; grid-template-columns: var(--side-w) 1fr; min-height: 0; }
+.t-header .hbody.no-side { grid-template-columns: 1fr; }
+.t-header .col-side { background: color-mix(in srgb, var(--side-bg) 9%, #fff); padding: 1mm 6mm var(--mar) var(--mar); }
+.t-header .col-main { padding: 1mm var(--mar) var(--mar) 8mm; }
+.t-header .hbody.no-side .col-main { padding-left: var(--mar); }
+
+/* ----- Minimal: één kolom, ATS-vriendelijk ----- */
 .t-minimal { padding: var(--mar) calc(var(--mar) + 2mm); }
 .t-minimal .min-top { display: flex; justify-content: space-between; align-items: center; gap: 6mm; }
 .t-minimal .min-id { flex: 1; }
 .t-minimal .head h1 { font-size: 2.1em; }
-.t-minimal .job-title { color: #1f2933; font-weight: 500; }
-.t-minimal .min-contact { margin-top: 2mm; font-size: 0.95em; color: #3d4a57; }
-.t-minimal .min-contact .sep { color: #9aa5b1; }
-.t-minimal .sec h2 { border-bottom: 0.35mm solid var(--accent); padding-bottom: 0.8mm; letter-spacing: 0.1em; }
-.t-minimal .skill-line { margin-top: 0.8mm; }
-.t-minimal .skill-line:first-child { margin-top: 0; }
-.t-minimal .lang-inline { display: flex; flex-wrap: wrap; gap: 0 5mm; }
+.t-minimal .job-title { color: var(--text); font-weight: 500; }
+.t-minimal .min-contact { margin-top: 2mm; font-size: 0.95em; color: color-mix(in srgb, var(--text) 82%, #fff); }
+.t-minimal .contact { display: flex; flex-wrap: wrap; gap: 0.8mm 5mm; }
+.t-minimal .contact-row { margin-top: 0; gap: 1.6mm; align-items: center; }
+.t-minimal .contact .ic { margin-top: 0; width: 1em; height: 1em; color: var(--heading); }
 .t-minimal .sub { font-style: normal; }
+.t-minimal.hs-caps .sec h2 { border-bottom-color: var(--heading); border-bottom-width: 0.35mm; letter-spacing: 0.1em; }
+.t-minimal .lang-list { display: flex; flex-wrap: wrap; gap: 0 5mm; }
+.t-minimal .skill-group { margin-top: 0.8mm; }
+.t-minimal .skill-name, .t-minimal .skill-list { display: inline; }
+.t-minimal .skill-name::after { content: ': '; font-weight: 700; }
+.t-minimal .skill-name .dots { margin-left: 1.5mm; }
