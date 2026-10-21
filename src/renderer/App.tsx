@@ -8,6 +8,9 @@ import { SectionList } from './editor/SectionList';
 import { LayoutPanel, StylePanel } from './editor/DesignPanels';
 import { SummaButton, SummaSelect } from './ui';
 import { Icon } from './icons';
+import { TitleBar } from './shell/TitleBar';
+import { AboutDialog, UpdateBanner } from './shell/UpdateUi';
+import { useUpdates } from './shell/useUpdates';
 
 type Toast = { kind: 'ok' | 'error'; text: string } | null;
 type Tab = 'sections' | 'layout' | 'style';
@@ -34,11 +37,13 @@ const readWidth = () => {
 };
 
 export function App() {
-  const { state, cv, status, updateCv, setActive, addCv, duplicate, importCv, removeCv, addSwatch } = useCvStore();
+  const { state, cv, status, saveNow, updateCv, setActive, addCv, duplicate, importCv, removeCv, addSwatch } = useCvStore();
   const [openId, setOpenId] = useState<string | null>(null);
   const [fit, setFit] = useState<FitReport | null>(null);
   const [toast, setToast] = useState<Toast>(null);
   const [busy, setBusy] = useState(false);
+  const [about, setAbout] = useState(false);
+  const [dismissed, setDismissed] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<{ title: string; initial: string; resolve: (v: string | null) => void } | null>(null);
   const [fitScale, setFitScale] = useState(0.7);
   const [zoom, setZoom] = useState<number | null>(null); // null = passend in het paneel
@@ -83,6 +88,9 @@ export function App() {
     setToast(t);
     if (t) window.setTimeout(() => setToast((cur) => (cur === t ? null : cur)), t.kind === 'error' ? 9000 : 5000);
   }, []);
+
+  const updates = useUpdates(saveNow, (kind, text) => notify({ kind, text }));
+  useEffect(() => { document.title = cv ? `${cv.name} - CV Studio` : 'CV Studio'; }, [cv?.name]);
 
   // schaal de A4-pagina zodat hij in het paneel past
   useLayoutEffect(() => {
@@ -185,10 +193,11 @@ export function App() {
   const compact = () => updateCv((c) => { Object.assign(c.style, SPACING_PRESETS.compact); c.style.fontSize = Math.min(c.style.fontSize, 9); });
 
   return (
+    <div className="shell">
+    <TitleBar cvName={cv.name} version={version} updateDot={updates.status?.state.kind === 'available' || updates.status?.state.kind === 'ready'} onAbout={() => setAbout(true)} />
     <div className="app" style={{ gridTemplateColumns: `${editorW}px 6px 1fr` }}>
       <section className="editor">
         <div className="editor-top">
-          <div className="brand"><i className="logo" aria-hidden="true" /><span>CV Studio</span>{version && <small data-testid="app-version" title={`CV Studio ${version}`}>v{version}</small>}</div>
           <div className="version-bar" role="toolbar" aria-label="Cv-versies en bestanden">
             <SummaSelect name="version-select" label="Cv-versie" value={state.activeId} onChange={setActive} options={state.cvs.map((c) => ({ value: c.id, label: c.name }))} />
             <SummaButton icon name="cv-new" title="Nieuw cv" onClick={async () => { const n = await ask('Naam van het nieuwe cv', 'Nieuw cv'); if (n) addCv(n); }}><Icon name="plus" /></SummaButton>
@@ -268,6 +277,9 @@ export function App() {
         </div>
       </section>
       {prompt && <PromptModal title={prompt.title} initial={prompt.initial} onDone={(v) => { prompt.resolve(v); setPrompt(null); }} />}
+      <UpdateBanner status={updates.status} actions={updates} dismissed={dismissed} onDismiss={setDismissed} />
+      {about && <AboutDialog status={updates.status} actions={updates} onClose={() => setAbout(false)} />}
+    </div>
     </div>
   );
 }

@@ -45,13 +45,13 @@ export function SummaAccordion({ title, children, defaultOpen = false, badge, na
 }
 
 /** Container voor één onderdeel van het cv: kop met acties, uitklapbare inhoud. */
-export function SummaSectionCard({ testid, secId, title, open, onToggle, lead, trail, badges, children, state, dragTarget, onDragOver, onDrop }: {
+export function SummaSectionCard({ testid, secId, title, open, onToggle, lead, trail, badges, children, state, dropEdge, dragging, onDragOver, onDrop }: {
   testid: string; secId: string; title: string; open: boolean; onToggle: () => void; lead?: React.ReactNode; trail?: React.ReactNode; badges?: React.ReactNode;
-  children?: React.ReactNode; state?: string; dragTarget?: boolean; onDragOver?: (e: React.DragEvent) => void; onDrop?: (e: React.DragEvent) => void;
+  children?: React.ReactNode; state?: string; dropEdge?: 'before' | 'after' | null; dragging?: boolean; onDragOver?: (e: React.DragEvent) => void; onDrop?: (e: React.DragEvent) => void;
 }) {
   const bid = useId();
   return (
-    <div data-testid={testid} data-sec-id={secId} className={`card ${open ? 'open' : ''} ${state ?? ''} ${dragTarget ? 'drop-target' : ''}`} onDragOver={onDragOver} onDrop={onDrop}>
+    <div data-testid={testid} data-sec-id={secId} className={`card ${open ? 'open' : ''} ${state ?? ''} ${dragging ? 'dragging' : ''} ${dropEdge ? `ins-${dropEdge}` : ''}`} onDragOver={onDragOver} onDrop={onDrop}>
       <div className="card-head">
         {lead}
         <button type="button" className="card-title-btn" aria-expanded={open} aria-controls={bid} data-testid={`${testid}-expand`} onClick={onToggle}>
@@ -88,7 +88,14 @@ export function SummaItemCard({ title, onUp, onDown, onRemove, children, index, 
   );
 }
 
-export interface MenuItem { key: string; label: string; onSelect: () => void; danger?: boolean; disabled?: boolean; testid?: string }
+export interface MenuItem {
+  key: string; label: string; onSelect: () => void; danger?: boolean; disabled?: boolean; testid?: string;
+  /** Niet-klikbaar kopje boven de volgende items (bijv. "Verplaatsen naar"). */
+  heading?: boolean;
+  /** Huidige keuze: getoond met vinkje en niet te kiezen. */
+  current?: boolean;
+  ariaLabel?: string;
+}
 
 /** Overloopmenu voor minder vaak gebruikte acties; bediening met pijltjes, Enter en Escape. */
 export function SummaMenu({ label, items, name }: { label: string; items: MenuItem[]; name: string }) {
@@ -117,9 +124,14 @@ export function SummaMenu({ label, items, name }: { label: string; items: MenuIt
       </SummaButton>
       {open && (
         <div className="popover menu-pop" role="menu" id={mid} aria-label={label}>
-          {items.map((it) => (
-            <button type="button" role="menuitem" key={it.key} data-testid={it.testid} disabled={it.disabled} className={it.danger ? 'danger' : ''}
-              onClick={(e) => { e.stopPropagation(); setOpen(false); it.onSelect(); }}>{it.label}</button>
+          {items.map((it) => it.heading ? (
+            <div key={it.key} className="pop-title" role="presentation">{it.label}</div>
+          ) : (
+            <button type="button" role="menuitem" key={it.key} data-testid={it.testid} disabled={it.disabled || it.current} aria-label={it.ariaLabel}
+              aria-current={it.current ? 'true' : undefined} className={`${it.danger ? 'danger' : ''} ${it.current ? 'current' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setOpen(false); it.onSelect(); }}>
+              {it.label}{it.current && <Icon name="check" size={13} />}
+            </button>
           ))}
         </div>
       )}

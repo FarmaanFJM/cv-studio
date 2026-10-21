@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  CV, PlaceTarget, SECTION_PRESETS, SECTION_TITLES, Section, SectionType, emptySection, moveInZone, placeSection, zoneOf
+  CV, PlaceTarget, SECTION_PRESETS, SECTION_TITLES, Section, SectionType, emptySection, moveInZone, relocateSection, zoneOf
 } from '../../shared/model';
 import { Icon } from '../icons';
 import { FitReport } from '../layout';
@@ -53,16 +53,29 @@ function AddMenu({ cv, onAdd }: { cv: CV; onAdd: (s: Section) => void }) {
   );
 }
 
+interface DropSpot { zone: PlaceTarget; beforeId: string | null; noop: boolean }
+const EDGE = 56; // px vanaf de rand van de editor waarbinnen tijdens slepen automatisch wordt gescrold
+
 export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overKey, setOverKey] = useState<string | null>(null);
+  const [drop, setDropState] = useState<DropSpot | null>(null);
+  const dropRef = useRef<DropSpot | null>(null);
   const [focusHandle, setFocusHandle] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const pointerY = useRef(0);
   const single = cv.template === 'minimal';
-  // in het kopbalk-sjabloon heeft het contactblok een vaste plek (geen zone)
-  const pinned = cv.template === 'header' ? cv.sections.find((s) => s.type === 'personal' && s.visible) : undefined;
-  const groups: { key: PlaceTarget; label: string; hint?: string }[] = single
+  // in het kopbalk-sjabloon heeft het contactblok een vaste plek (geen zone): niet te slepen of te verplaatsen, wel te tonen/verbergen
+  const fixedId = cv.template === 'header' ? cv.sections.find((s) => s.type === 'personal')?.id : undefined;
+  const pinned = fixedId ? cv.sections.find((s) => s.id === fixedId && s.visible) : undefined;
+  const groups: { key: PlaceTarget; label: string }[] = single
     ? [{ key: 'primary', label: 'Volgorde' }, { key: 'hidden', label: 'Verborgen' }]
     : [{ key: 'primary', label: 'Hoofdinhoud' }, { key: 'supplementary', label: 'Aanvullende inhoud' }, { key: 'hidden', label: 'Verborgen' }];
+
+  const setDrop = (d: DropSpot | null) => {
+    const prev = dropRef.current;
+    if (prev?.zone === d?.zone && prev?.beforeId === d?.beforeId && prev?.noop === d?.noop) return;
+    dropRef.current = d; setDropState(d);
+  };
 
   useEffect(() => {
     if (!focusHandle) return;
@@ -70,58 +83,99 @@ export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Pr
     setFocusHandle(null);
   }, [focusHandle, cv.sections]);
 
+  // automatisch scrollen als je dicht bij de boven- of onderrand van de editor sleept
+  useEffect(() => {
+    if (!dragId) return;
+    const sc = rootRef.current?.closest<HTMLElement>('.editor-scroll');
+    if (!sc) return;
+    let raf = 0;
+    const tick = () => {
+      const r = sc.getBoundingClientRect();
+      const y = pointerY.current;
+      if (y > 0) {
+        if (y < r.top + EDGE) sc.scrollTop -= Math.ceil(((r.top + EDGE - y) / EDGE) * 16);
+        else if (y > r.bottom - EDGE) sc.scrollTop += Math.ceil(((y - (r.bottom - EDGE)) / EDGE) * 16);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [dragId]);
+
   const place = (id: string, target: PlaceTarget, beforeId?: string) => {
-    update((c) => { c.sections = placeSection(c.sections, id, target, beforeId); });
+    update((c) => { c.sections = relocateSection(c.sections, id, target, beforeId, c.template); });
     onPlaced(id, target);
   };
-  const drop = (target: PlaceTarget, beforeId?: string) => {
-    if (dragId && dragId !== beforeId) place(dragId, target, beforeId);
-    setDragId(null); setOverKey(null);
+  const endDrag = () => { setDragId(null); setDrop(null); pointerY.current = 0; };
+  const commit = () => {
+    const d = dropRef.current;
+    if (dragId && d && !d.noop) place(dragId, d.zone, d.beforeId ?? undefined);
+    endDrag();
   };
   const step = (id: string, dir: -1 | 1) => update((c) => { c.sections = moveInZone(c.sections, id, dir, c.template); });
+
+  const inZone = (zone: PlaceTarget) => cv.sections.filter((s) => zoneOf(cv, s) === zone && s.id !== pinned?.id);
 
   const card = (s: Section) => {
     const u = fit?.sections.find((x) => x.id === s.id);
     const open = openId === s.id;
     const over = !!u && u.overflowMm > 0 && s.visible;
     const z = zoneOf(cv, s);
-    const isPinned = pinned?.id === s.id;
+    const fixed = s.id === fixedId;
     const title = s.type === 'personal' ? 'Persoonlijke gegevens' : s.title || SECTION_TITLES[s.type];
+    const siblings = inZone(z);
+    const at = siblings.findIndex((x) => x.id === s.id);
+    const edge: 'before' | 'after' | null = !drop || drop.noop ? null
+      : drop.beforeId === s.id ? 'before'
+      : drop.beforeId === null && drop.zone === z && at === siblings.length - 1 && siblings[at].id !== dragId ? 'after' : null;
     return (
       <SummaSectionCard
         key={s.id} testid={`sec-${s.type}`} secId={s.id} title={title} open={open}
         state={`${s.visible ? '' : 'hidden-sec'} ${over ? 'overflow' : ''}`}
-        dragTarget={overKey === s.id && dragId !== s.id}
-        onDragOver={(e) => { if (dragId) { e.preventDefault(); e.stopPropagation(); setOverKey(s.id); } }}
-        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); drop(z, s.id); }}
+        dragging={dragId === s.id} dropEdge={edge}
+        onDragOver={(e) => {
+          if (!dragId || fixed) return;
+          e.preventDefault(); e.stopPropagation();
+          if (s.id === dragId) { setDrop({ zone: z, beforeId: null, noop: true }); return; }
+          const r = e.currentTarget.getBoundingClientRect();
+          const before = e.clientY < r.top + r.height / 2;
+          const nextId = before ? s.id : siblings[at + 1]?.id ?? null;
+          const insertAt = nextId ? siblings.findIndex((x) => x.id === nextId) : siblings.length;
+          // invoegen direct voor of na het gesleepte onderdeel zelf verandert niets
+          setDrop({ zone: z, beforeId: nextId, noop: siblings[insertAt - 1]?.id === dragId || siblings[insertAt]?.id === dragId });
+        }}
+        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); commit(); }}
         onToggle={() => { setOpenId(open ? null : s.id); if (!open && s.visible) onPlaced(s.id, s.zone); }}
         lead={
-          <button type="button" className="handle" draggable data-handle={s.id} aria-label={`${title} verplaatsen: sleep, of gebruik pijltje omhoog of omlaag`}
+          <button type="button" className="handle" draggable={!fixed} disabled={fixed} data-handle={s.id}
+            aria-label={fixed ? `${title}: vaste plek in dit sjabloon` : `${title} verplaatsen: sleep, of gebruik pijltje omhoog of omlaag`}
             onKeyDown={(e) => {
               if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); step(s.id, e.key === 'ArrowUp' ? -1 : 1); setFocusHandle(s.id); }
             }}
-            onDragStart={(e) => { setDragId(s.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.id); }}
-            onDragEnd={() => { setDragId(null); setOverKey(null); }}><Icon name="grip" size={16} /></button>
+            onDragStart={(e) => {
+              setDragId(s.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.id);
+              const head = (e.currentTarget as HTMLElement).closest('.card-head');
+              if (head) e.dataTransfer.setDragImage(head, 24, 20);
+            }}
+            onDragEnd={endDrag}><Icon name="grip" size={16} /></button>
         }
         badges={s.visible && u && u.heightMm > 0 ? <span className={`usage ${over ? 'bad' : ''}`} title="Ruimte op de pagina">{Math.round(u.heightMm)} mm{over ? ' · te lang' : ''}</span> : undefined}
         trail={
           <>
-            {!single && !isPinned && (
-              <div className="zone-seg-wrap">
-                <div className={`seg zone-seg ${s.visible ? '' : 'is-disabled'}`} role="radiogroup" aria-label={`Plaatsing van ${title}`}>
-                  <button type="button" role="radio" aria-checked={s.zone === 'primary'} disabled={!s.visible} className={s.zone === 'primary' ? 'on' : ''} title="Naar hoofdinhoud"
-                    data-testid={`sec-${s.type}-zone-primary`} onClick={() => place(s.id, 'primary')}>Hoofd</button>
-                  <button type="button" role="radio" aria-checked={s.zone === 'supplementary'} disabled={!s.visible} className={s.zone === 'supplementary' ? 'on' : ''} title="Naar aanvullende inhoud"
-                    data-testid={`sec-${s.type}-zone-supplementary`} onClick={() => place(s.id, 'supplementary')}>Aanvullend</button>
-                </div>
-              </div>
-            )}
             <SummaToggle labelHidden name={`sec-${s.type}-toggle`} label={`${title} tonen in cv`} checked={s.visible}
               onChange={(v) => {
                 if (!v) place(s.id, 'hidden');
                 else { update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.visible = true; }); onPlaced(s.id, s.zone); }
               }} />
             <SummaMenu name={`sec-${s.type}-menu`} label={`Meer acties voor ${title}`} items={[
+              ...(fixed ? [] : [
+                { key: 'move-h', heading: true, label: 'Verplaatsen naar', onSelect: () => undefined },
+                ...groups.map((g) => ({
+                  key: `move-${g.key}`, label: g.label, ariaLabel: `${title} verplaatsen naar ${g.label}`, testid: `sec-${s.type}-move-${g.key}`,
+                  current: z === g.key, onSelect: () => { place(s.id, g.key); setFocusHandle(s.id); }
+                }))
+              ]),
+              { key: 'order-h', heading: true, label: 'Volgorde', onSelect: () => undefined },
               { key: 'up', label: 'Omhoog', testid: `sec-${s.type}-up`, onSelect: () => step(s.id, -1) },
               { key: 'down', label: 'Omlaag', testid: `sec-${s.type}-down`, onSelect: () => step(s.id, 1) },
               ...(s.type !== 'personal' ? [{
@@ -141,7 +195,9 @@ export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Pr
   };
 
   return (
-    <div className="sections" data-testid="section-list">
+    <div className={`sections ${dragId ? 'is-dragging' : ''}`} data-testid="section-list" ref={rootRef}
+      onDragOverCapture={(e) => { pointerY.current = e.clientY; }}
+      onDragLeave={(e) => { if (!rootRef.current?.contains(e.relatedTarget as Node)) setDrop(null); }}>
       {pinned && (
         <div className="zone zone-pinned" data-testid="zone-head">
           <div className="zone-title">Vaste plek</div>
@@ -149,11 +205,12 @@ export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Pr
         </div>
       )}
       {groups.map((g) => {
-        const list = cv.sections.filter((s) => zoneOf(cv, s) === g.key && s.id !== pinned?.id);
+        const list = inZone(g.key);
+        const active = drop?.zone === g.key;
         return (
-          <div key={g.key} className={`zone zone-${g.key} ${overKey === `zone-${g.key}` ? 'drop-target' : ''}`} data-testid={`zone-${g.key}`}
-            onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverKey(`zone-${g.key}`); } }}
-            onDrop={(e) => { e.preventDefault(); drop(g.key); }}>
+          <div key={g.key} className={`zone zone-${g.key} ${active ? 'drop-target' : ''}`} data-testid={`zone-${g.key}`}
+            onDragOver={(e) => { if (dragId) { e.preventDefault(); setDrop({ zone: g.key, beforeId: null, noop: list.length > 0 && list[list.length - 1].id === dragId }); } }}
+            onDrop={(e) => { e.preventDefault(); commit(); }}>
             <div className="zone-title">{g.label}<span className="count">{list.length}</span></div>
             {list.map(card)}
             {list.length === 0 && <div className="zone-empty">{dragId ? 'Hier neerzetten' : 'Leeg'}</div>}

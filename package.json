@@ -1,7 +1,7 @@
 {
   "name": "cv-studio",
-  "version": "3.0.1",
-  "description": "CV Studio — offline Windows-cv-builder voor precies één A4-pagina",
+  "version": "3.1.0",
+  "description": "CV Studio, offline Windows-cv-builder voor precies één A4-pagina",
   "author": "FarmaanFJM",
   "license": "MIT",
   "private": true,
@@ -15,9 +15,11 @@
     "test": "vitest run",
     "test:e2e": "npm run build && node e2e/run.mjs",
     "test:e2e:linux": "npm run build && xvfb-run -a node e2e/run.mjs",
-    "dist": "npm run build && electron-builder --win nsis --x64",
-    "dist:dir": "npm run build && electron-builder --win dir --x64",
-    "licenses": "node scripts/collect-licenses.mjs"
+    "dist": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "dist:dir": "npm run build && electron-builder --win dir --x64 --publish never",
+    "licenses": "node scripts/collect-licenses.mjs",
+    "gen:logo": "python3 scripts/gen-logo-assets.py",
+    "verify:exe": "node scripts/verify-exe.mjs"
   },
   "build": {
     "appId": "nl.cvstudio.app",
@@ -35,12 +37,19 @@
       "target": [
         "nsis"
       ],
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false
+      "perMachine": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CV Studio"
     },
     "artifactName": "CV-Studio-Setup-${version}.${ext}",
     "extraResources": [
@@ -55,8 +64,27 @@
       {
         "from": "licenses",
         "to": "licenses"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
       }
-    ]
+    ],
+    "icon": "build/icon.ico",
+    "afterPack": "scripts/after-pack.cjs",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "FarmaanFJM",
+        "repo": "cv-studio",
+        "releaseType": "release"
+      }
+    ],
+    "copyright": "Copyright © FarmaanFJM. MIT License."
   },
   "devDependencies": {
     "@fontsource/dm-sans": "^5.3.0",
@@ -89,6 +117,7 @@
     "playwright-core": "^1.64.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "resedit": "^3.1.0",
     "simple-icons": "^16.35.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
@@ -111,5 +140,8 @@
     "pdf",
     "windows",
     "offline-first"
-  ]
+  ],
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
 }

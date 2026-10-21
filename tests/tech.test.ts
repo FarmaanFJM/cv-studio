@@ -145,9 +145,9 @@ describe('migratie van v2-opslag (tech-iconen)', () => {
   const projects = (extra: object) => sanitizeCv({ sections: [{ id: 'p', type: 'projects', items: [], ...extra }] }).sections.find((x) => x.id === 'p')!;
   const custom = (extra: object) => sanitizeCv({ sections: [{ id: 'c', type: 'custom', ...extra }] }).sections.find((x) => x.id === 'c')!;
 
-  it('skills: icons auto + tekst -> "Icoon + label", volgt stijl', () => {
+  it('skills: icons auto + tekst -> chips met iconen (de oude "Icoon + label"), volgt stijl', () => {
     const s = skills({ icons: 'auto', display: 'text', techColor: 'inherit' });
-    expect(s.type === 'skills' && [s.display, s.techOverride]).toEqual(['inline', false]);
+    expect(s.type === 'skills' && [s.display, s.techOverride]).toEqual(['chips', false]);
   });
   it('skills: icons auto + eigen kleur -> eigen instelling met die kleur', () => {
     const s = skills({ icons: 'auto', display: 'chips', techColor: 'brand' });
@@ -157,12 +157,12 @@ describe('migratie van v2-opslag (tech-iconen)', () => {
     const s = skills({ icons: 'off', display: 'chips' });
     expect(s.type === 'skills' && [s.display, s.techOverride, s.techShow]).toEqual(['chips', true, false]);
   });
-  it('projecten: chips met iconen -> inline, volgt stijl; zonder iconen -> eigen uit', () => {
+  it('projecten: chips met iconen -> chips, volgt stijl; zonder iconen -> tekst met eigen uit', () => {
     const a = projects({ techDisplay: 'chips', techIcons: true, techColor: 'inherit' });
     const b = projects({ techDisplay: 'chips', techIcons: false });
     const c = projects({ techDisplay: 'text' });
-    expect(a.type === 'projects' && [a.techDisplay, a.techOverride]).toEqual(['inline', false]);
-    expect(b.type === 'projects' && [b.techDisplay, b.techOverride, b.techShow]).toEqual(['inline', true, false]);
+    expect(a.type === 'projects' && [a.techDisplay, a.techOverride]).toEqual(['chips', false]);
+    expect(b.type === 'projects' && [b.techDisplay, b.techOverride, b.techShow]).toEqual(['text', true, false]);
     expect(c.type === 'projects' && [c.techDisplay, c.techOverride]).toEqual(['text', false]);
   });
   it('custom: icons aan volgt stijl, uit wordt eigen uit', () => {

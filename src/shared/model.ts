@@ -1,5 +1,6 @@
 // Datamodel (v2) + sanitizing. Pure TypeScript zodat main, renderer en tests het delen.
 import { isHex } from './color';
+import { effectiveTech } from './tech';
 
 export type TemplateId = 'sidebar' | 'header' | 'minimal';
 /**
@@ -10,10 +11,14 @@ export type Zone = 'primary' | 'supplementary';
 export type PlaceTarget = Zone | 'hidden';
 export type PhotoShape = 'round' | 'square';
 export type SkillMode = 'flat' | 'grouped' | 'levels';
-/** Presentatie van vaardigheden: 'text' = alleen tekst (nooit iconen), 'inline' = icoon + label, 'list' = lijst, 'chips' = chips met icoon. */
-export type SkillDisplay = 'text' | 'inline' | 'list' | 'chips';
-/** Presentatie van de tech stack in projecten. */
-export type TechDisplay = 'text' | 'inline' | 'chips';
+/**
+ * Presentatie van vaardigheden: 'text' = gewone tekst (nooit iconen), 'chips' = compacte chips (met iconen als die aanstaan).
+ * Dit staat los van de indeling (SkillMode: lijst, groepen, niveaus). De oude waarden 'inline' en 'list' bestaan alleen nog in
+ * opgeslagen bestanden en worden bij het inlezen omgezet (zie migrateDisplay).
+ */
+export type SkillDisplay = 'text' | 'chips';
+/** Presentatie van de tech stack in projecten (zelfde twee keuzes). */
+export type TechDisplay = 'text' | 'chips';
 /** Kleur van technologie-iconen: automatisch (op basis van plaatsing/achtergrond), originele merkkleuren of monochroom. */
 export type TechColorMode = 'auto' | 'brand' | 'mono';
 /**
@@ -156,7 +161,7 @@ export function uid(): string {
 
 export const SECTION_TITLES: Record<SectionType, string> = {
   personal: 'Contact',
-  profile: 'Profiel',
+  profile: 'Over mij',
   experience: 'Werkervaring',
   education: 'Opleiding',
   projects: 'Projecten',
@@ -208,7 +213,6 @@ export const SECTION_PRESETS: SectionPreset[] = [
   { key: 'certs', label: 'Certificaten', zone: 'supplementary', make: () => custom('Certificaten', 'supplementary', 'list') },
   { key: 'links', label: 'Links', zone: 'supplementary', make: () => custom('Links', 'supplementary', 'keyvalue') },
   { key: 'tech', label: 'Technologieën & tools', zone: 'supplementary', make: () => ({ id: uid(), type: 'skills', title: 'Technologieën', visible: true, zone: 'supplementary', mode: 'flat', display: 'chips', ...TECH_DEFAULT, iconOverrides: {}, groups: [newSkillGroup()] }) },
-  { key: 'about', label: 'Over mij', zone: 'supplementary', make: () => custom('Over mij', 'supplementary', 'text') },
   { key: 'extra', label: 'Extra informatie', zone: 'supplementary', make: () => custom('Extra informatie', 'supplementary', 'text') },
   { key: 'stats', label: 'Gegevens / maten', zone: 'supplementary', make: () => custom('Gegevens', 'supplementary', 'keyvalue') },
   { key: 'custom-main', label: 'Eigen onderdeel (hoofdinhoud)', zone: 'primary', make: () => custom('Nieuw onderdeel', 'primary', 'text') }
@@ -249,27 +253,35 @@ export function zoneOf(cv: Pick<CV, 'template'>, s: Section): PlaceTarget {
   return cv.template === 'minimal' ? 'primary' : s.zone;
 }
 
-/** Verplaats een onderdeel naar een zone (of verborgen), optioneel vóór een ander onderdeel. */
-export function placeSection(sections: Section[], id: string, target: PlaceTarget, beforeId?: string): Section[] {
+/**
+ * Verplaats een onderdeel naar een zone (of verborgen), optioneel vóór een ander onderdeel.
+ * In het minimale sjabloon bestaan zones niet: de opgeslagen zone van het onderdeel blijft dan ongewijzigd, zodat wisselen van
+ * sjabloon geen plaatsing kost; 'primary' betekent daar "de enige kolom".
+ */
+export function relocateSection(sections: Section[], id: string, target: PlaceTarget, beforeId?: string, template: TemplateId = 'sidebar'): Section[] {
   const idx = sections.findIndex((s) => s.id === id);
   if (idx < 0) return sections;
+  const single = template === 'minimal';
   const moved: Section = { ...sections[idx] } as Section;
   if (target === 'hidden' && !beforeId) {
     // verbergen verandert de volgorde niet, zodat "tonen" het onderdeel op dezelfde plek terugzet
     return sections.map((s, i) => (i === idx ? { ...moved, visible: false } as Section : s));
   }
   if (target === 'hidden') moved.visible = false;
-  else { moved.visible = true; moved.zone = target; }
+  else { moved.visible = true; if (!single) moved.zone = target; }
   const rest = sections.filter((s) => s.id !== id);
   let at = beforeId ? rest.findIndex((s) => s.id === beforeId) : -1;
   if (at < 0) {
     // achteraan in de doelgroep
-    const inTarget = rest.map((s, i) => ({ s, i })).filter(({ s }) => (target === 'hidden' ? !s.visible : s.visible && s.zone === target));
+    const inTarget = rest.map((s, i) => ({ s, i })).filter(({ s }) => (target === 'hidden' ? !s.visible : s.visible && (single || s.zone === target)));
     at = inTarget.length ? inTarget[inTarget.length - 1].i + 1 : rest.length;
   }
   rest.splice(at, 0, moved);
   return rest;
 }
+
+export const placeSection = (sections: Section[], id: string, target: PlaceTarget, beforeId?: string): Section[] =>
+  relocateSection(sections, id, target, beforeId, 'sidebar');
 
 /** Eén stap omhoog/omlaag binnen dezelfde (effectieve) zone. */
 export function moveInZone(sections: Section[], id: string, dir: -1 | 1, template: TemplateId): Section[] {
@@ -348,7 +360,19 @@ function sanitizeOverrides(v: unknown): Record<string, string> {
   return out;
 }
 
-function sanitizeSection(raw: unknown): Section | null {
+/**
+ * Migratie van de oude weergavewaarden. Alleen 'text' en 'chips' bestaan nog.
+ * - 'inline' (icoon + label) en 'list' (opsomming) worden 'chips' als er iconen te zien waren, anders 'text';
+ *   skills en iconeninstellingen blijven ongewijzigd. Zichtbare verandering: 'list' krijgt geen opsommingstekens meer,
+ *   'inline' krijgt de chip-omlijning.
+ */
+export function migrateDisplay(legacy: unknown, iconsVisible: boolean): 'text' | 'chips' {
+  if (legacy === 'chips') return 'chips';
+  if (legacy === 'inline' || legacy === 'list') return iconsVisible ? 'chips' : 'text';
+  return 'text';
+}
+
+function sanitizeSection(raw: unknown, globalIcons = true): Section | null {
   if (!isObj(raw)) return null;
   const type = raw.type;
   const known: SectionType[] = ['personal', 'profile', 'experience', 'education', 'projects', 'skills', 'languages', 'custom'];
@@ -373,19 +397,26 @@ function sanitizeSection(raw: unknown): Section | null {
         start: str(i.start, 60), end: str(i.end, 60), description: str(i.description) })) };
     case 'projects':
       // v2: 'chips' was de compacte icoon+naam-weergave, die nu 'inline' heet
-      return { ...base, type: 'projects', ...sanitizeTech(raw, !(raw.techDisplay === 'chips' && raw.techIcons === false)),
-        techDisplay: raw.techDisplay === 'chips' && typeof raw.techOverride !== 'boolean' ? 'inline' : oneOf(raw.techDisplay, ['text', 'inline', 'chips'] as const, 'text'), items: arr(raw.items).filter(isObj).map((i) => ({
+    {
+      const tech = sanitizeTech(raw, !(raw.techDisplay === 'chips' && raw.techIcons === false));
+      const legacy = raw.techDisplay === 'chips' && typeof raw.techOverride !== 'boolean' ? 'inline' : raw.techDisplay;
+      return { ...base, type: 'projects', ...tech,
+        techDisplay: migrateDisplay(legacy, effectiveTech({ techIcons: globalIcons, techColorMode: 'auto' }, tech).show), items: arr(raw.items).filter(isObj).map((i) => ({
         id: id(i.id), name: str(i.name, 300), tech: str(i.tech, 500), period: str(i.period, 60),
         description: str(i.description), github: str(i.github, 500) })) };
-    case 'skills':
+    }
+    case 'skills': {
+      const tech = sanitizeTech(raw, raw.icons === 'auto');
+      const legacy = raw.display === 'text' && raw.icons === 'auto' && typeof raw.techOverride !== 'boolean' ? 'inline' : raw.display;
       return { ...base, type: 'skills',
         mode: oneOf(raw.mode, ['flat', 'grouped', 'levels'] as const, 'grouped'),
-        ...sanitizeTech(raw, raw.icons === 'auto'),
-        display: raw.display === 'text' && raw.icons === 'auto' && typeof raw.techOverride !== 'boolean' ? 'inline' : oneOf(raw.display, ['text', 'inline', 'list', 'chips'] as const, 'text'),
+        ...tech,
+        display: migrateDisplay(legacy, effectiveTech({ techIcons: globalIcons, techColorMode: 'auto' }, tech).show),
         iconOverrides: sanitizeOverrides(raw.iconOverrides),
         groups: arr(raw.groups).filter(isObj).map((g) => ({
           id: id(g.id), name: str(g.name, 200), level: Math.round(num(g.level, 0, 0, 5)),
           skills: arr(g.skills).filter((s): s is string => typeof s === 'string').map((s) => s.slice(0, 200)) })) };
+    }
     case 'languages':
       return { ...base, type: 'languages', display: oneOf(raw.display, ['text', 'dots'] as const, 'text'),
         items: arr(raw.items).filter(isObj).map((i) => ({
@@ -433,7 +464,8 @@ export function sanitizeCv(raw: unknown): CV {
   if (!isObj(raw)) throw new Error('Het bestand bevat geen geldig cv.');
   const base = createEmptyCv();
   const personal = isObj(raw.personal) ? raw.personal : {};
-  let sections = arr(raw.sections).map(sanitizeSection).filter((s): s is Section => s !== null);
+  const globalIcons = isObj(raw.style) ? bool(raw.style.techIcons, true) : true;
+  let sections = arr(raw.sections).map((x) => sanitizeSection(x, globalIcons)).filter((s): s is Section => s !== null);
   const seen = new Set<string>();
   sections = sections.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)));
   if (!Array.isArray(raw.sections)) sections = base.sections;

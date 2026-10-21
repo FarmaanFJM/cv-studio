@@ -7,6 +7,9 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { PDFDocument } from 'pdf-lib';
 import { build } from 'esbuild';
+import http from 'node:http';
+import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'e2e/out');
@@ -47,6 +50,11 @@ async function saved(page) {
   await page.waitForFunction(() => document.querySelector('[data-testid="save-status"]')?.textContent === 'Alles opgeslagen');
 }
 const secs = (page) => page.$$eval('.cv-page [data-sec]', (els) => els.map((e) => e.dataset.title));
+// verplaats een onderdeel via het overloopmenu ("Verplaatsen naar"): het toegankelijke alternatief voor slepen
+const moveTo = async (page, type, zone) => {
+  await page.getByTestId(`sec-${type}-menu`).click();
+  await page.getByTestId(`sec-${type}-move-${zone}`).click();
+};
 const open = async (page, type) => {
   const card = page.locator(`[data-testid="sec-${type}"]`);
   if (!(await card.locator('.card-body').count())) await card.getByTestId(`sec-${type}-expand`).click();
@@ -89,8 +97,9 @@ const hasPdftoppm = (() => { try { execFileSync('pdftoppm', ['-v'], { stdio: 'ig
 
 const results = [];
 async function scenario(name, fn) {
+  if (process.env.E2E_ONLY && !new RegExp(process.env.E2E_ONLY).test(name)) return; // bijv. E2E_ONLY='^(36|37)' om alleen die scenario's te draaien
   try { await fn(); results.push([true, name]); console.log('  ✓', name); }
-  catch (e) { results.push([false, name, e]); console.log('  ✗', name, '\n    ', e.message.split('\n').slice(0, 6).join('\n     ')); }
+  catch (e) { results.push([false, name, e]); console.log('  ✗', name, '\n    ', e.message.split('\n').slice(0, 6).join('\n     ')); if (process.env.E2E_DEBUG) console.log((e.stack ?? '').split('\n').filter((l) => l.includes('run.mjs')).slice(0, 3).join('\n')); }
 }
 const assert = (c, m) => { if (!c) throw new Error(m); };
 
@@ -343,32 +352,33 @@ await scenario('14. Zones: onderdeel naar hoofd/aanvullend/verborgen, ook met sl
   await page.getByTestId('tab-sections').click();
   const inSide = (t) => page.locator(`.col-side [data-title="${t}"]`).count();
   const inMain = (t) => page.locator(`.col-main [data-title="${t}"]`).count();
-  assert(await inMain('Profiel') === 1 && await inSide('Profiel') === 0, 'profiel start in hoofd');
+  assert(await inMain('Over mij') === 1 && await inSide('Over mij') === 0, 'Over mij start in hoofd');
   assert(await page.getByTestId('zone-primary').locator('.zone-title').innerText().then((t) => /Hoofdinhoud/i.test(t)), 'label Hoofdinhoud');
   assert(await page.getByTestId('zone-supplementary').locator('.zone-title').innerText().then((t) => /Aanvullende inhoud/i.test(t)), 'label Aanvullende inhoud');
   assert(!/Zijbalk|Linker|Hoofdgedeelte/.test(await page.getByTestId('section-list').innerText()), 'oude positiegebonden labels zichtbaar');
-  await page.getByTestId('sec-profile-zone-supplementary').click();
-  assert(await inSide('Profiel') === 1 && await inMain('Profiel') === 0, 'profiel niet naar aanvullende inhoud');
-  await page.waitForSelector('.cv-page [data-title="Profiel"].flash', { timeout: 2000 });
+  assert(await page.getByTestId('section-list').locator('[data-testid$="-zone-primary"], [data-testid$="-zone-supplementary"]').count() === 0, 'de losse Hoofd/Aanvullend-knoppen zijn nog zichtbaar');
+  assert(!/\bHoofd\b.*\bAanvullend\b/s.test(await page.getByTestId('sec-profile').locator('.card-head').innerText()), 'Hoofd/Aanvullend-regelaar zichtbaar in de kaartkop');
+  await moveTo(page, 'profile', 'supplementary');
+  assert(await inSide('Over mij') === 1 && await inMain('Over mij') === 0, 'Over mij niet naar aanvullende inhoud');
+  await page.waitForSelector('.cv-page [data-title="Over mij"].flash', { timeout: 2000 });
   await page.screenshot({ path: path.join(out, 'flash-bestemming.png') });
   await page.waitForFunction(() => !document.querySelector('.cv-page .flash'), null, { timeout: 4000 });
   assert(await page.locator('[data-testid="zone-supplementary"] [data-testid="sec-profile"]').count() === 1, 'editor toont zone niet');
-  await page.getByTestId('sec-profile-zone-primary').click();
-  assert(await inMain('Profiel') === 1, 'profiel niet terug');
+  await moveTo(page, 'profile', 'primary');
+  assert(await inMain('Over mij') === 1, 'Over mij niet terug');
   await page.getByTestId('sec-languages-toggle').click();
   assert(await page.locator('[data-testid="zone-hidden"] [data-testid="sec-languages"]').count() === 1, 'niet in verborgen');
   await page.getByTestId('sec-languages-toggle').click();
   // slepen van zijbalk naar hoofd
   await page.getByTestId('sec-skills').locator('.handle').dragTo(page.getByTestId('zone-primary'));
   assert(await inMain('Vaardigheden') === 1 || await page.locator('[data-testid="zone-primary"] [data-testid="sec-skills"]').count() === 1, 'slepen naar hoofd werkt niet');
-  await page.getByTestId('sec-skills-zone-supplementary').click();
+  await moveTo(page, 'skills', 'supplementary');
 });
 
 await scenario('15. Vaardigheden: lijst, groepen en niveaus (chips, stippen)', async () => {
   const sk = await open(page, 'skills');
   await sk.getByTestId('skill-mode-levels').click();
   assert(await sk.getByTestId('skill-0').count() === 1, 'groepen ontbreken');
-  await sk.getByTestId('skill-0').locator('.item-toggle').click();
   await sk.getByTestId('skill-0-level').fill('4');
   await sk.getByTestId('skill-display-chips').click();
   assert(await page.locator('.cv-page .chip').count() >= 2, 'chips ontbreken');
@@ -521,18 +531,16 @@ await scenario('23. Tech-iconen: weergave, automatisch, per skill, suggesties, p
   await sk.getByTestId('skill-display-text').click();
   assert(await page.locator('.cv-page .sec-skills svg.tic').count() === 0, 'tekstweergave toont iconen');
   assert((await page.locator('.cv-page .sec-skills').innerText()).includes('TypeScript, Python'), 'tekstweergave veranderd');
-  await sk.getByTestId('skill-display-inline').click();
+  await sk.getByTestId('skill-display-chips').click();
   for (const id of ['typescript', 'database', 'java', 'react', 'nodejs', 'api', 'git', 'github', 'docker', 'godot']) {
     assert(await tech(id) >= 1, `icoon ${id} ontbreekt in preview`);
   }
   assert(await tech('python') === 1, 'python ontbreekt');
   await page.screenshot({ path: path.join(out, 'tech-iconen-tekst.png') });
   // per skill: Python -> geen icoon, Git -> terminal
-  await sk.getByTestId('skill-0').locator('.item-toggle').click().catch(() => {});
   await page.getByTestId('skill-pill-python').first().click();
   await page.getByTestId('icon-pick-none').click();
   assert(await tech('python') === 0, 'python-icoon niet verwijderd');
-  await sk.getByTestId('skill-2').locator('.item-toggle').click();
   await page.getByTestId('skill-pill-git').first().click();
   await page.getByTestId('icon-search').fill('termi');
   await page.getByTestId('icon-pick-terminal').click();
@@ -540,25 +548,26 @@ await scenario('23. Tech-iconen: weergave, automatisch, per skill, suggesties, p
   await page.getByTestId('skill-pill-git').first().click();
   await page.getByTestId('icon-pick-auto').click();
   assert(await page.locator('.cv-page .sec-skills svg[data-tech="git"]').count() >= 1, 'automatisch niet hersteld');
-  // suggesties
+  // suggesties: TypeScript verwijderen en via de suggestielijst weer toevoegen (komt achteraan)
   const list = sk.getByTestId('skill-0-list');
+  await sk.getByTestId('skill-pill-x-typescript').click();
+  assert(await sk.getByTestId('skill-pill-typescript').count() === 0, 'tag niet verwijderd');
   await list.fill('TypeSc');
-  await page.getByTestId('suggest-typescript').click();
-  assert((await list.inputValue()).startsWith('TypeScript'), 'suggestie niet toegepast: ' + await list.inputValue());
-  await list.fill('TypeScript, Python, SQL, Java');
+  await page.getByTestId('skill-0-list-opt-typescript').click();
+  assert((await list.inputValue()) === '', 'invoer niet geleegd na kiezen');
   const pillTexts = await sk.getByTestId('skill-0').locator('.pill').allInnerTexts();
-  assert(pillTexts.join('|') === 'TypeScript|Python|SQL|Java', 'pills: ' + pillTexts.join('|'));
+  assert(pillTexts.join('|') === 'Python|SQL|Java|TypeScript', 'pills: ' + pillTexts.join('|'));
   // icon-first chips
   await sk.getByTestId('skill-display-chips').click();
   assert(await page.locator('.cv-page .sec-skills .chip.has-icon svg').count() >= 6, 'chips met icoon ontbreken');
   await page.screenshot({ path: path.join(out, 'tech-iconen-chips.png') });
-  // projecten: tech stack als 'Icoon + label'
+  // projecten: tech stack als chips met iconen
   const pr = await open(page, 'projects');
-  await pr.getByTestId('tech-display-inline').click();
-  assert(await page.locator('.cv-page .sec-projects .tech-chips.plain .chip.has-icon').count() >= 3, 'tech-iconen in project ontbreken');
+  await pr.getByTestId('tech-display-chips').click();
+  assert(await page.locator('.cv-page .sec-projects .tech-chips .chip.has-icon').count() >= 3, 'tech-iconen in project ontbreken');
   await pr.getByTestId('tech-display-text').click();
   assert(await page.locator('.cv-page .sec-projects svg[data-tech]').count() === 0, 'project-tekstweergave toont iconen');
-  await pr.getByTestId('tech-display-inline').click();
+  await pr.getByTestId('tech-display-chips').click();
   // links met GitHub/LinkedIn-iconen
   await page.getByTestId('add-section').click();
   await page.getByTestId('add-links').click();
@@ -688,8 +697,7 @@ await scenario('26. Per onderdeel: volgt stijl / eigen instellingen, voorrangsre
   assert(await pr.locator('label.toggle', { hasText: 'Toon iconen' }).locator('input').isDisabled(), 'sectietoggle niet uitgeschakeld bij globaal uit');
   assert(/globaal/i.test(await pr.innerText()), 'uitleg bij globaal uit ontbreekt');
   const sk = await open(page, 'skills');
-  await sk.getByTestId('skill-0').locator('.item-toggle').click().catch(() => {});
-  assert(await sk.getByTestId('pills-off').count() >= 1, 'keuzes per vaardigheid zetten iconen toch aan');
+  assert(await sk.getByTestId('skill-pills').first().locator('svg.tic').count() === 0, 'keuzes per vaardigheid zetten iconen toch aan');
   await page.getByTestId('tab-style').click();
   await page.getByTestId('toggle-tech-icons').click();
   await page.getByTestId('tab-sections').click();
@@ -928,8 +936,639 @@ await scenario('35. Migratie van v2-opslag (oude tech-instellingen) behoudt het 
   await pr.getByTestId('sec-projects-expand').click();
   await openAccordion(pr);
   assert(await radio(pr.getByTestId('tech-source-custom')) === 'true' && await radio(pr.getByTestId('tech-color-mono')) === 'true', 'sectie-override uit v2 niet zichtbaar in de editor');
-  fs.rmSync(ud, { recursive: true, force: true });
+  fs.rmSync(ud, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
   ({ app, page } = await (async () => { await app.close(); return launch(); })());
+});
+
+
+// ================= v3.1.0: slepen, vaardigheden, titelbalk, updates =================
+const newCv = async (name) => {
+  await page.getByTestId('cv-new').click();
+  await page.getByTestId('prompt-input').fill(name);
+  await page.getByTestId('prompt-ok').click();
+  await page.waitForFunction((n) => document.querySelector('[data-testid="titlebar-doc"]')?.textContent === n, name);
+  await page.getByTestId('tab-sections').click();
+};
+const collapseAll = async () => {
+  for (const b of await page.locator('[data-testid$="-expand"][aria-expanded="true"]').all()) await b.click();
+};
+const zoneOrder = (zone) => page.getByTestId(`zone-${zone}`).locator('[data-sec-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('sec-', '')));
+const previewOrder = (region) => page.locator(`.cv-page [data-region="${region}"] > .sec`).evaluateAll((els) => els.map((e) => e.className.replace(/.*sec-(\w+).*/, '$1')));
+const handleOf = (type) => page.getByTestId(`sec-${type}`).locator('.handle');
+
+await scenario('36. Slepen: tussen categorieën, lege categorie, tussen twee onderdelen, zonder uitklappen', async () => {
+  await newCv('Sleeptest');
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-sidebar').click();
+  await page.getByTestId('tab-sections').click();
+  const lg = await open(page, 'languages');
+  await lg.getByTestId('lang-add').click();
+  await lg.getByTestId('lang-0-name').fill('Nederlands');
+  await collapseAll();
+  assert((await zoneOrder('primary')).join() === 'profile,projects,education,experience', 'beginvolgorde hoofd: ' + (await zoneOrder('primary')).join());
+  assert((await zoneOrder('supplementary')).join() === 'personal,skills,languages', 'beginvolgorde aanvullend');
+  // 1. van Aanvullende inhoud naar Hoofdinhoud, precies tussen Projecten en Opleiding (bovenste helft van Opleiding)
+  await handleOf('languages').dragTo(page.getByTestId('sec-education'), { targetPosition: { x: 80, y: 6 } });
+  assert((await zoneOrder('primary')).join() === 'profile,projects,languages,education,experience', 'tussen twee onderdelen: ' + (await zoneOrder('primary')).join());
+  assert(await page.locator('.cv-page .col-main [data-title="Talen"]').count() === 1, 'preview toont verplaatsing niet direct');
+  assert(await page.locator('[data-testid$="-expand"][aria-expanded="true"]').count() === 0, 'slepen klapt onderdelen uit');
+  // 2. terug naar Aanvullende inhoud, achteraan (onderste helft van het laatste onderdeel)
+  await handleOf('languages').dragTo(page.getByTestId('sec-skills'), { targetPosition: { x: 80, y: 30 } });
+  assert((await zoneOrder('supplementary')).join() === 'personal,skills,languages', 'terug achteraan: ' + (await zoneOrder('supplementary')).join());
+  // 3. herordenen binnen een categorie: Experience boven Projecten
+  await handleOf('experience').dragTo(page.getByTestId('sec-projects'), { targetPosition: { x: 80, y: 6 } });
+  assert((await zoneOrder('primary')).join() === 'profile,experience,projects,education', 'binnen categorie: ' + (await zoneOrder('primary')).join());
+  // 4. naar Verborgen (lege categorie) en terug
+  await handleOf('education').dragTo(page.getByTestId('zone-hidden'));
+  assert((await zoneOrder('hidden')).join() === 'education', 'niet in Verborgen');
+  assert(await page.locator('.cv-page [data-title="Opleiding"]').count() === 0, 'verborgen onderdeel staat nog in de cv');
+  await handleOf('education').dragTo(page.getByTestId('zone-primary'), { targetPosition: { x: 200, y: 8 } }); // op de kop van de categorie: achteraan
+  assert((await zoneOrder('primary')).join() === 'profile,experience,projects,education', 'terug uit Verborgen: ' + (await zoneOrder('primary')).join());
+  // 5. lege categorie: alles uit Aanvullend weg, dan weer slepen naar de lege zone
+  for (const t of ['personal', 'skills', 'languages']) await moveTo(page, t, 'primary');
+  assert((await zoneOrder('supplementary')).length === 0 && /Leeg/.test(await page.getByTestId('zone-supplementary').innerText()), 'zone niet leeg');
+  await handleOf('skills').dragTo(page.getByTestId('zone-supplementary'));
+  assert((await zoneOrder('supplementary')).join() === 'skills', 'neerzetten in lege categorie mislukt');
+  for (const t of ['personal', 'languages']) await moveTo(page, t, 'supplementary');
+});
+
+await scenario('36b. Slepen: invoegmarkering, categoriemarkering, automatisch scrollen, vaste plek en Minimaal', async () => {
+  await collapseAll();
+  const hb = await handleOf('experience').boundingBox();
+  const target = await page.getByTestId('sec-education').boundingBox();
+  await page.mouse.move(hb.x + 8, hb.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + 30, hb.y + 40, { steps: 4 });
+  await page.mouse.move(target.x + 120, target.y + 5, { steps: 8 });
+  await page.waitForSelector('.card.ins-before', { timeout: 3000 });
+  assert(await page.locator('.card.ins-before, .card.ins-after').count() === 1, 'precies één invoegmarkering verwacht');
+  assert(await page.locator('[data-testid="sec-education"].ins-before').count() === 1, 'markering staat niet voor Opleiding');
+  assert(await page.locator('.zone.drop-target').count() === 1, 'bestemmingscategorie niet gemarkeerd');
+  assert(await page.locator('.card.dragging').count() === 1, 'gesleept onderdeel niet gemarkeerd');
+  await page.screenshot({ path: path.join(out, 'slepen-markering.png') });
+  // onderste helft van het laatste onderdeel in de zone: markering komt na het onderdeel
+  const last = await page.getByTestId('sec-education').boundingBox();
+  await page.mouse.move(last.x + 120, last.y + last.height - 4, { steps: 4 });
+  await page.waitForTimeout(80);
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+  assert(await page.locator('.card.ins-before, .card.ins-after, .zone.drop-target, .card.dragging').count() === 0, 'markeringen blijven staan na neerzetten');
+  assert((await zoneOrder('primary')).join() === 'profile,projects,education,experience', 'na neerzetten: ' + (await zoneOrder('primary')).join());
+
+  // automatisch scrollen: lage editor, hoge inhoud; naar de onderrand slepen
+  await page.setViewportSize({ width: 1400, height: 520 });
+  for (const t of ['personal', 'projects']) { const c = await open(page, t); await c.scrollIntoViewIfNeeded(); }
+  const sc = page.locator('.editor-scroll');
+  await sc.evaluate((e) => { e.scrollTop = 0; });
+  assert(await sc.evaluate((e) => e.scrollHeight - e.clientHeight) > 300, 'editor niet hoog genoeg voor de scrolltest');
+  const h2 = await handleOf('profile').boundingBox();
+  const area = await sc.boundingBox();
+  await page.mouse.move(h2.x + 8, h2.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(h2.x + 30, h2.y + 40, { steps: 4 });
+  await page.mouse.move(area.x + 200, area.y + area.height - 12, { steps: 6 });
+  await page.waitForTimeout(900);
+  const down = await sc.evaluate((e) => e.scrollTop);
+  assert(down > 40, `niet automatisch omlaag gescrold (${down})`);
+  await page.mouse.move(area.x + 200, area.y + 10, { steps: 6 });
+  await page.waitForTimeout(900);
+  assert(await sc.evaluate((e) => e.scrollTop) < down, 'niet automatisch omhoog gescrold');
+  await page.mouse.up();
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await collapseAll();
+
+  // vaste plek (kopbalk): contactblok niet te slepen en zonder 'Verplaatsen naar'
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-header').click();
+  await page.getByTestId('tab-sections').click();
+  assert(await handleOf('personal').isDisabled(), 'contactblok sleepbaar in kopbalk-sjabloon');
+  await page.getByTestId('sec-personal-menu').click();
+  assert(await page.getByTestId('sec-personal-move-primary').count() === 0, 'contactblok heeft Verplaatsen naar in kopbalk-sjabloon');
+  await page.keyboard.press('Escape');
+  // Minimaal: één kolom; slepen verandert de volgorde maar bewaart de opgeslagen zones
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-sidebar').click();
+  await page.getByTestId('tab-sections').click();
+  const before = { p: await zoneOrder('primary'), s: await zoneOrder('supplementary') };
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-minimal').click();
+  await page.getByTestId('tab-sections').click();
+  assert(await page.getByTestId('zone-supplementary').count() === 0, 'Minimaal toont zones');
+  await handleOf('skills').dragTo(page.getByTestId('sec-profile'), { targetPosition: { x: 80, y: 6 } });
+  const minOrder = await zoneOrder('primary'); // in Minimaal staat alles zichtbaars in één lijst, in cv-volgorde
+  assert(minOrder.indexOf('skills') < minOrder.indexOf('profile'), 'volgorde in Minimaal: ' + minOrder.join());
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-sidebar').click();
+  await page.getByTestId('tab-sections').click();
+  assert((await zoneOrder('supplementary')).includes('skills') && !(await zoneOrder('primary')).includes('skills'), 'zone van Vaardigheden verloren na Minimaal');
+  assert(before.s.includes('skills'), 'uitgangspunt');
+  // sluit af zoals begonnen
+  await handleOf('skills').dragTo(page.getByTestId('sec-languages'), { targetPosition: { x: 80, y: 30 } });
+});
+
+await scenario('36c. Toetsenbord: Verplaatsen naar via het menu, focus blijft op de greep', async () => {
+  await collapseAll();
+  await page.getByTestId('sec-experience-menu').click();
+  await page.getByTestId('sec-experience-move-supplementary').click();
+  assert((await zoneOrder('supplementary')).includes('experience'), 'menu verplaatst niet');
+  assert(await page.evaluate(() => document.activeElement?.hasAttribute('data-handle')), 'focus niet op de greep na verplaatsen');
+  // alleen via toetsenbord: menu openen met Enter, pijltjes, Enter
+  await handleOf('experience').focus();
+  await page.keyboard.press('Tab'); // titelknop
+  await page.keyboard.press('Tab'); // schakelaar
+  await page.keyboard.press('Tab'); // menu
+  await page.keyboard.press('Enter'); // opent het menu en focust het eerste te kiezen item
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-testid'));
+  assert(focused === 'sec-experience-move-primary', 'eerste menu-item niet gefocust: ' + focused);
+  await page.keyboard.press('ArrowDown'); // Verborgen (Aanvullende inhoud is de huidige plek en wordt overgeslagen)
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'sec-experience-move-hidden', 'pijltje omlaag slaat de huidige plek niet over');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Enter');
+  assert((await zoneOrder('primary')).includes('experience'), 'Enter in het menu verplaatst niet');
+  await page.screenshot({ path: path.join(out, 'verplaatsen-menu.png') });
+});
+
+await scenario('37. Vaardigheden: suggesties, Tab/Enter/pijltjes/Escape, eigen namen, duplicaten, chevron, catalogus', async () => {
+  await collapseAll();
+  const sk = await open(page, 'skills');
+  await sk.getByTestId('skill-add').click();
+  const input = sk.getByTestId('skill-0-list');
+  const popup = page.getByTestId('skill-0-list-popup');
+  const pills = async () => (await sk.getByTestId('skill-0').locator('.pill').allInnerTexts());
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'skill-0-name', 'nieuwe groep: categorie niet gefocust');
+  // ARIA-semantiek
+  await input.click();
+  await input.fill('Type');
+  await popup.waitFor();
+  assert(await input.getAttribute('role') === 'combobox' && await input.getAttribute('aria-expanded') === 'true', 'combobox-rol/expanded ontbreekt');
+  const listId = await input.getAttribute('aria-controls');
+  assert(await page.locator(`[id="${listId}"][role="listbox"]`).count() === 1, 'aria-controls wijst niet naar de listbox');
+  assert(await page.locator('[role="option"]').first().innerText().then((t) => t.includes('TypeScript')), 'Type -> TypeScript ontbreekt: ' + await page.locator('[role="option"]').first().innerText());
+  const active = await input.getAttribute('aria-activedescendant');
+  assert(active && await page.locator(`[id="${active}"][role="option"][aria-selected="true"]`).count() === 1, 'aria-activedescendant wijst niet naar een geselecteerde optie');
+  // Tab neemt de eerste suggestie over; invoer leeg; focus blijft
+  await page.keyboard.press('Tab');
+  assert((await pills()).join('|') === 'TypeScript', 'Tab voegt niet toe: ' + (await pills()).join('|'));
+  assert((await input.inputValue()) === '', 'invoer niet geleegd');
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'skill-0-list', 'focus niet bij de invoer');
+  assert(await popup.count() === 0, 'lijst blijft open na kiezen');
+  // 'Py' -> Python, PyTorch, Pytest
+  await input.fill('Py');
+  await popup.waitFor();
+  const optTexts = await page.locator('[role="option"]').allInnerTexts();
+  for (const n of ['Python', 'PyTorch', 'Pytest']) assert(optTexts.some((t) => t.includes(n)), `Py -> ${n} ontbreekt: ${optTexts.join(',')}`);
+  // pijltjes: omlaag, omlaag, omhoog, Enter
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowUp');
+  const second = (await page.locator('[role="option"][aria-selected="true"]').innerText()).trim();
+  assert(second === optTexts[1].trim(), `pijltjes: gemarkeerd ${second}, verwacht ${optTexts[1]}`);
+  await page.keyboard.press('Enter');
+  assert((await pills()).includes(second.replace(/\s+/g, ' ')) || (await pills()).includes(optTexts[1].trim()), 'Enter voegt gemarkeerde suggestie niet toe: ' + (await pills()).join('|'));
+  // Escape sluit zonder de tekst te wijzigen
+  await input.fill('Rea');
+  await popup.waitFor();
+  await page.keyboard.press('Escape');
+  assert(await popup.count() === 0 && (await input.inputValue()) === 'Rea', 'Escape wijzigt tekst of sluit niet');
+  await input.fill('');
+  // zonder actieve suggestie gedraagt Tab zich normaal (focus verlaat het veld)
+  await input.fill('Mijn Eigen Skill');
+  await page.keyboard.press('Enter'); // eigen naam, hoofdletters blijven
+  assert((await pills()).includes('Mijn Eigen Skill'), 'eigen vaardigheid niet toegevoegd: ' + (await pills()).join('|'));
+  await input.fill('zzzqq');
+  await page.keyboard.press('Tab');
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) !== 'skill-0-list', 'Tab hield de focus vast zonder suggestie');
+  assert((await pills()).includes('zzzqq'), 'eigen tekst niet bewaard bij verlaten van het veld');
+  await sk.getByTestId('skill-pill-x-zzzqq').click();
+  // duplicaten (hoofdletters en spaties tellen niet)
+  const n = (await pills()).length;
+  await input.click();
+  await input.fill('  typescript ');
+  await page.keyboard.press('Enter');
+  await input.fill('PYTHON');
+  await page.keyboard.press('Enter');
+  const lowerTs = (await pills()).filter((t) => t.toLowerCase() === 'typescript').length;
+  assert(lowerTs === 1, 'duplicaat TypeScript toegevoegd');
+  assert(await sk.getByTestId('skill-note').count() === 1 || (await pills()).filter((t) => t.toLowerCase() === 'python').length === 1, 'geen duplicaatmelding');
+  // chevron: bladeren door de catalogus met categorieën
+  await sk.getByTestId('skill-0-list-chevron').click();
+  await popup.waitFor();
+  assert(await input.getAttribute('aria-expanded') === 'true', 'chevron opent niet');
+  assert(await page.getByTestId('skill-0-list-cat-databases').count() === 1, 'categoriekeuze ontbreekt');
+  await page.getByTestId('skill-0-list-cat-databases').click();
+  await page.getByTestId('skill-0-list-opt-postgresql').click();
+  assert((await pills()).includes('PostgreSQL'), 'selectie met de muis uit de catalogus mislukt');
+  await page.screenshot({ path: path.join(out, 'skill-catalogus.png') });
+  // pijl omlaag opent de lijst ook; lege toestand als er niets meer te kiezen is (alle 'Mobiele apps' toegevoegd)
+  const mobile = 9;
+  for (let i = 0; i < mobile; i++) {
+    await sk.getByTestId('skill-0-list-chevron').click();
+    await page.getByTestId('skill-0-list-cat-mobile').click();
+    await page.locator('[data-testid^="skill-0-list-opt-"]').first().click();
+  }
+  await sk.getByTestId('skill-0-list-chevron').click();
+  await page.getByTestId('skill-0-list-cat-mobile').click();
+  assert(await page.getByTestId('skill-0-list-empty').isVisible(), 'lege toestand ontbreekt');
+  await page.keyboard.press('Escape');
+  await input.click();
+  await page.keyboard.press('ArrowDown');
+  await popup.waitFor();
+  await page.keyboard.press('Escape');
+  // alles in de preview, één pagina
+  assert((await page.locator('.cv-page .sec-skills').innerText()).includes('Mijn Eigen Skill'), 'preview mist eigen vaardigheid');
+});
+
+await scenario('37b. Categorie-presets: kiezen, zoeken, eigen naam; geen vaardigheden zonder keuze', async () => {
+  const sk = page.locator('[data-testid="sec-skills"]');
+  await sk.getByTestId('skill-add').click();
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'skill-1-name', 'categorie niet gefocust');
+  const name = sk.getByTestId('skill-1-name');
+  await name.fill('Data');
+  await page.getByTestId('skill-1-name-popup').waitFor();
+  assert((await page.locator('[role="option"]').first().innerText()).includes('Databases'), 'zoeken in presets: ' + await page.locator('[role="option"]').first().innerText());
+  await page.keyboard.press('Tab');
+  assert(await name.inputValue() === 'Databases', 'Tab neemt preset niet over: ' + await name.inputValue());
+  assert(await sk.getByTestId('skill-1').locator('.pill').count() === 0, 'preset voegde vaardigheden toe');
+  // chevron: alle presets, gegroepeerd in IT en algemeen
+  await sk.getByTestId('skill-1-name-chevron').click();
+  const pop = page.getByTestId('skill-1-name-popup');
+  await pop.waitFor();
+  const text = await pop.innerText();
+  for (const t of ['IT EN TECHNIEK', 'ALGEMEEN', 'Programmeertalen', 'Frameworks & Libraries', 'Communicatie', 'Klantenservice', 'Microsoft Office', 'Presenteren']) assert(text.toUpperCase().includes(t.toUpperCase()), `preset ${t} ontbreekt`);
+  await page.getByTestId('skill-1-name-opt-communication').click();
+  assert(await name.inputValue() === 'Communicatie', 'preset kiezen met de muis mislukt');
+  // eigen naam blijft kunnen
+  await name.fill('Mijn eigen groep');
+  await page.waitForTimeout(100);
+  assert(await name.inputValue() === 'Mijn eigen groep', 'eigen categorienaam niet behouden');
+  assert((await page.locator('.cv-page .sec-skills').innerText()).includes('Mijn eigen groep') === false, 'lege groep verschijnt in de cv');
+  // voorgestelde vaardigheden voor de gekozen categorie staan bovenaan
+  await name.fill('Programmeertalen');
+  await sk.getByTestId('skill-1-list').click();
+  await sk.getByTestId('skill-1-list-chevron').click();
+  const firstOpt = await page.locator('[data-testid^="skill-1-list-opt-"]').first().innerText();
+  assert(/JavaScript/.test(firstOpt), 'voorstel voor Programmeertalen: ' + firstOpt);
+  await page.keyboard.press('Escape');
+  // Programmeertalen en het Talen-onderdeel blijven gescheiden
+  const langs = page.locator('[data-testid="sec-languages"]');
+  assert((await langs.locator('.card-title').innerText()).trim() === 'Talen', 'Talen-onderdeel veranderd');
+  assert(!(await page.locator('.cv-page .sec-languages').innerText()).includes('TypeScript'), 'programmeertaal in Talen');
+});
+
+await scenario('38. Over mij: titel, invoerlabel, bestaande titel blijft', async () => {
+  const p = await open(page, 'profile');
+  assert((await page.getByTestId('sec-profile').locator('.card-title').innerText()).trim() === 'Over mij', 'standaardtitel');
+  assert(await p.locator('label.field', { hasText: 'Korte introductie' }).count() === 1, 'label Korte introductie ontbreekt');
+  assert((await p.getByTestId('profile-text').getAttribute('placeholder')).length < 90, 'placeholder te lang');
+  assert(!/—/.test(await page.locator('.editor').innerText()), 'em-streep in de editor');
+  await p.getByTestId('profile-text').fill('Korte test.');
+  assert((await page.locator('.cv-page .sec-profile h2').innerText()).toUpperCase().includes('OVER MIJ'), 'titel in cv');
+  await p.getByTestId('sec-title').fill('Profiel');
+  assert((await page.locator('.cv-page .sec-profile h2').innerText()).toUpperCase().includes('PROFIEL'), 'eigen titel niet behouden');
+  await p.getByTestId('sec-title').fill('Over mij');
+  await collapseAll();
+});
+
+await scenario('39. Titelbalk: structuur, sleepgebieden, beveiligde instellingen, niets in de pdf', async () => {
+  const tb = page.getByTestId('titlebar');
+  const box = await tb.boundingBox();
+  assert(box.height >= 43 && box.height <= 48, 'titelbalkhoogte ' + box.height);
+  const css = await tb.evaluate((e) => { const c = getComputedStyle(e); return { bg: c.backgroundColor, drag: c.getPropertyValue('-webkit-app-region'), bb: c.borderBottomWidth }; });
+  assert(css.bg === 'rgb(20, 22, 24)' && css.bb === '1px', 'titelbalk-opmaak ' + JSON.stringify(css));
+  assert(css.drag === 'drag', 'titelbalk niet sleepbaar: ' + css.drag);
+  assert(await page.getByTestId('titlebar-logo').evaluate((i) => i.complete && i.naturalWidth > 0), 'logo niet geladen');
+  assert((await tb.innerText()).includes('CV Studio'), 'naam ontbreekt');
+  assert((await page.getByTestId('titlebar-doc').innerText()) === 'Sleeptest', 'cv-naam niet in titelbalk');
+  assert(await page.evaluate(() => document.title) === 'Sleeptest - CV Studio', 'documenttitel');
+  const noDrag = await page.getByTestId('about-open').evaluate((e) => getComputedStyle(e).getPropertyValue('-webkit-app-region'));
+  assert(noDrag === 'no-drag', 'knop in titelbalk is sleepbaar: ' + noDrag);
+  // geen sleepgebied buiten de titelbalk: knoppen, tabs, velden en de splitter kunnen het venster nooit verslepen
+  const dragEls = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => getComputedStyle(e).getPropertyValue('-webkit-app-region') === 'drag' && !e.closest('[data-testid="titlebar"]')).length);
+  assert(dragEls === 0, 'sleepgebied buiten de titelbalk: ' + dragEls);
+  const interactiveInDrag = await page.evaluate(() => [...document.querySelectorAll('[data-testid="titlebar"] button, [data-testid="titlebar"] input, [data-testid="titlebar"] select')].filter((e) => getComputedStyle(e).getPropertyValue('-webkit-app-region') !== 'no-drag').length);
+  assert(interactiveInDrag === 0, 'interactief element in sleepgebied');
+  // hernoemen werkt door in titelbalk en venstertitel
+  await page.getByTestId('cv-rename').click();
+  await page.getByTestId('prompt-input').fill('Hernoemd cv');
+  await page.getByTestId('prompt-ok').click();
+  await page.waitForFunction(() => document.title === 'Hernoemd cv - CV Studio');
+  assert(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()) === 'Hernoemd cv - CV Studio', 'venstertitel');
+  // beveiligde instellingen en smalle bridge
+  const prefs = await app.evaluate(({ BrowserWindow }) => { const p = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences(); return { c: p.contextIsolation, n: p.nodeIntegration, s: p.sandbox }; });
+  assert(prefs.c === true && prefs.n === false && prefs.s === true, 'webPreferences ' + JSON.stringify(prefs));
+  const bridge = await page.evaluate(() => ({ req: typeof window.require, proc: typeof window.process, keys: Object.keys(window.cvApi).sort(), upd: Object.keys(window.cvApi.updates).sort() }));
+  assert(bridge.req === 'undefined' && bridge.proc === 'undefined', 'Node-toegang in de pagina');
+  assert(bridge.upd.join() === 'check,download,getStatus,install,onStatus,openRelease,setAutoCheck', 'updater-API: ' + bridge.upd.join());
+  assert(!bridge.keys.some((k) => /ipc|electron|minimize|maximize|close/i.test(k)), 'onverwachte API: ' + bridge.keys.join());
+  await page.screenshot({ path: path.join(out, 'titelbalk.png'), clip: { x: 0, y: 0, width: 1400, height: 60 } });
+  // PDF zonder app-schil: één A4-pagina, geen titelbalktekst
+  await page.getByTestId('tab-sections').click();
+  const pers = await open(page, 'personal');
+  await pers.getByTestId('p-fullName').fill('Pdf Controle');
+  await collapseAll();
+  await page.getByTestId('export-pdf').click();
+  await page.waitForFunction(() => /1 pagina/.test(document.querySelector('[data-testid="toast"]')?.textContent || ''));
+  const pdfBytes = fs.readFileSync(path.join(out, 'Pdf Controle.pdf'));
+  const doc = await PDFDocument.load(pdfBytes);
+  const { width, height } = doc.getPage(0).getSize();
+  assert(doc.getPageCount() === 1 && Math.abs(width - 595.28) < 2 && Math.abs(height - 841.89) < 2, `pdf-afmeting ${width}x${height}`);
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(pdfBytes), useSystemFonts: true }).promise;
+  const text = (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(' ');
+  assert(!/CV Studio|Hernoemd cv|v3\./.test(text), 'app-schil in de pdf: ' + text.slice(0, 120));
+  await page.getByTestId('toast').click().catch(() => {});
+});
+
+// --- venstergedrag met een echte vensterbeheerder (Linux/Xvfb + openbox); op Windows is dit een handmatige controle ---
+const have = (bin) => { try { execFileSync('which', [bin], { stdio: 'ignore' }); return true; } catch { return false; } };
+await scenario('40. Venster: minimaliseren, maximaliseren, herstellen, slepen, dubbelklikken, formaat', async () => {
+  if (process.env.CV_STUDIO_EXE || !have('Xvfb') || !have('openbox') || !have('xdotool')) { console.log('     (overgeslagen: vereist Xvfb, openbox en xdotool op Linux; op Windows handmatig controleren)'); return; }
+  const display = ':83';
+  const xvfb = spawn('Xvfb', [display, '-screen', '0', '1600x1000x24'], { stdio: 'ignore' });
+  await new Promise((r) => setTimeout(r, 900));
+  const wm = spawn('openbox', [], { stdio: 'ignore', env: { ...process.env, DISPLAY: display } });
+  await new Promise((r) => setTimeout(r, 900));
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'cvstudio-win-'));
+  let a2;
+  try {
+    a2 = await electron.launch({ args: [root, '--no-sandbox'], env: { ...process.env, DISPLAY: display, CV_STUDIO_USER_DATA: ud, CV_STUDIO_TEST: '1' } });
+    const p2 = await a2.firstWindow();
+    await p2.waitForSelector('[data-testid="titlebar"]');
+    const st = () => a2.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; return { max: w.isMaximized(), min: w.isMinimized(), b: w.getBounds() }; });
+    const op = (fn) => a2.evaluate(({ BrowserWindow }, f) => { const w = BrowserWindow.getAllWindows()[0]; return new Function('w', f)(w); }, fn);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const xd = (...x) => execFileSync('xdotool', x.map(String), { env: { ...process.env, DISPLAY: display } });
+    const b0 = (await st()).b;
+    await op('w.maximize()'); await wait(500);
+    assert((await st()).max, 'maximaliseren mislukt');
+    await op('w.unmaximize()'); await wait(500);
+    assert(!(await st()).max, 'herstellen mislukt');
+    await op('w.minimize()'); await wait(500);
+    assert((await st()).min, 'minimaliseren mislukt');
+    await op('w.restore()'); await wait(500);
+    assert(!(await st()).min, 'terugzetten na minimaliseren mislukt');
+    // formaat wijzigen en minimale afmeting
+    await op('w.setBounds({ x: 50, y: 50, width: 1300, height: 800 })'); await wait(300);
+    assert((await st()).b.width === 1300, 'formaat wijzigen');
+    await op('w.setBounds({ x: 50, y: 50, width: 300, height: 200 })'); await wait(300);
+    const small = (await st()).b;
+    assert(small.width >= 1000 && small.height >= 640, `minimale afmeting niet afgedwongen (${small.width}x${small.height})`);
+    await op('w.setBounds({ x: 100, y: 60, width: 1400, height: 900 })'); await wait(300);
+    // slepen aan een lege plek van de titelbalk
+    let b = (await st()).b;
+    xd('mousemove', b.x + 700, b.y + 22); xd('mousedown', 1); xd('mousemove', b.x + 780, b.y + 60); await wait(120); xd('mousemove', b.x + 840, b.y + 90); xd('mouseup', 1); await wait(400);
+    const moved = (await st()).b;
+    assert(moved.x > b.x + 20 && moved.y > b.y + 20, `titelbalk sleept het venster niet (${b.x},${b.y} -> ${moved.x},${moved.y})`);
+    // dubbelklik maximaliseert en herstelt
+    b = moved;
+    xd('mousemove', b.x + 700, b.y + 22); xd('click', '--repeat', 2, '--delay', 90, 1); await wait(600);
+    assert((await st()).max, 'dubbelklik maximaliseert niet');
+    b = (await st()).b;
+    xd('mousemove', b.x + 700, b.y + 22); xd('click', '--repeat', 2, '--delay', 90, 1); await wait(600);
+    assert(!(await st()).max, 'dubbelklik herstelt niet');
+    // beginnen te slepen op een knop in de titelbalk verplaatst het venster niet
+    b = (await st()).b;
+    const btn = await p2.getByTestId('about-open').boundingBox();
+    xd('mousemove', b.x + btn.x + 8, b.y + btn.y + 8); xd('mousedown', 1); xd('mousemove', b.x + btn.x + 70, b.y + btn.y + 70); await wait(150); xd('mouseup', 1); await wait(300);
+    const after = (await st()).b;
+    assert(after.x === b.x && after.y === b.y, 'knop in de titelbalk sleept het venster');
+    // een wijziging maken en afsluiten: het venster sluit netjes en de gegevens zijn opgeslagen
+    await p2.getByTestId('cv-rename').click();
+    await p2.getByTestId('prompt-input').fill('Sluittest');
+    await p2.getByTestId('prompt-ok').click();
+    await p2.waitForFunction(() => document.querySelector('[data-testid="save-status"]')?.textContent === 'Alles opgeslagen');
+    await a2.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+    await wait(800);
+    assert(JSON.parse(fs.readFileSync(path.join(ud, 'data/cvs.json'), 'utf8')).cvs[0].name === 'Sluittest', 'gegevens niet bewaard bij sluiten');
+    a2 = null;
+  } finally {
+    try { await a2?.close(); } catch { /* al gesloten */ }
+    wm.kill(); xvfb.kill();
+    fs.rmSync(ud, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
+  }
+});
+
+// --- updates: echte electron-updater tegen een lokale, gecontroleerde feed (er wordt niets gepubliceerd of van GitHub gehaald) ---
+function startFeed() {
+  const cfg = { version: '9.9.9', body: crypto.randomBytes(3_000_000), corrupt: false, ymlStatus: 200, delay: 0, dropAt: 0, notes: '- Nieuwe titelbalk\n- Vaardigheden kiezen uit een lijst', exeRequests: 0, ymlRequests: 0 };
+  const srv = http.createServer((req, res) => {
+    const u = req.url.split('?')[0];
+    if (/^\/latest.*\.yml$/.test(u)) {
+      cfg.ymlRequests++;
+      if (cfg.ymlStatus !== 200) { res.statusCode = cfg.ymlStatus; return res.end('x'); }
+      const sha = crypto.createHash('sha512').update(cfg.body).digest('base64');
+      res.setHeader('content-type', 'text/yaml');
+      return res.end(`version: ${cfg.version}\nfiles:\n  - url: CV-Studio-Setup-${cfg.version}.exe\n    sha512: ${sha}\n    size: ${cfg.body.length}\npath: CV-Studio-Setup-${cfg.version}.exe\nsha512: ${sha}\nreleaseDate: '2026-10-21T10:00:00.000Z'\nreleaseNotes: ${JSON.stringify(cfg.notes)}\n`);
+    }
+    if (/\.exe$/.test(u)) {
+      cfg.exeRequests++;
+      // 'corrupt': het manifest klopt, maar de bytes zijn beschadigd (één byte omgedraaid)
+      const body = cfg.corrupt ? Buffer.concat([Buffer.from([cfg.body[0] ^ 255]), cfg.body.subarray(1)]) : cfg.body;
+      res.setHeader('content-length', String(body.length));
+      res.setHeader('content-type', 'application/octet-stream');
+      let sent = 0;
+      const tick = () => {
+        if (res.destroyed) return;
+        if (cfg.dropAt && sent >= cfg.dropAt) return req.socket.destroy();
+        if (sent >= body.length) return res.end();
+        const chunk = body.subarray(sent, sent + 131072);
+        sent += chunk.length;
+        res.write(chunk);
+        setTimeout(tick, cfg.delay);
+      };
+      return tick();
+    }
+    res.statusCode = 404; res.end();
+  });
+  return new Promise((resolve) => srv.listen(0, '127.0.0.1', () => resolve({ cfg, url: `http://127.0.0.1:${srv.address().port}`, close: () => srv.close() })));
+}
+const currentVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const settingsFile = path.join(userData, 'settings.json');
+const relaunch = async (env, settings) => {
+  await app.close();
+  if (settings === null) fs.rmSync(settingsFile, { force: true }); else fs.writeFileSync(settingsFile, JSON.stringify(settings));
+  ({ app, page } = await launch(env));
+};
+const about = async () => { await page.getByTestId('about-open').click(); await page.getByTestId('about-dialog').waitFor(); };
+const closeAbout = async () => { await page.getByTestId('about-close').click(); };
+const checkNow = async () => { await page.getByTestId('upd-check').click(); await page.waitForFunction(() => document.querySelector('[data-testid="upd-result"]')?.textContent !== 'Controleren…'); };
+const result = () => page.getByTestId('upd-result').innerText();
+
+await scenario('41. Updates: nieuwste versie, oudere en pre-release worden genegeerd, versievergelijking', async () => {
+  const feed = await startFeed();
+  try {
+    await relaunch({ CV_STUDIO_UPDATE_FEED: feed.url }, { autoCheckUpdates: false });
+    await about();
+    assert(await page.getByTestId('upd-current').innerText() === currentVersion, 'huidige versie');
+    assert(await page.getByTestId('upd-last').innerText() === 'Nog niet gecontroleerd', 'laatste controle vooraf');
+    feed.cfg.version = currentVersion;
+    await checkNow();
+    assert(/nieuwste versie/.test(await result()) && await page.getByTestId('upd-available').count() === 0, 'zelfde versie: ' + await result());
+    assert(await page.getByTestId('update-banner').count() === 0, 'melding bij gelijke versie');
+    feed.cfg.version = '0.0.1';
+    await checkNow();
+    assert(/nieuwste versie/.test(await result()), 'oudere versie wordt aangeboden (downgrade): ' + await result());
+    feed.cfg.version = '99.0.0-beta.1';
+    await checkNow();
+    assert(/nieuwste versie/.test(await result()), 'pre-release wordt aangeboden: ' + await result());
+    const [maj] = currentVersion.split('.');
+    feed.cfg.version = `${maj}.99.0`;
+    await checkNow();
+    assert(await page.getByTestId('upd-available').innerText() === `${maj}.99.0`, 'nieuwere stabiele versie niet gemeld: ' + await result());
+    assert(/beschikbaar/.test(await result()), 'resultaattekst');
+    assert(await page.getByTestId('upd-last').innerText() !== 'Nog niet gecontroleerd', 'laatste controle niet bijgewerkt');
+    assert(feed.cfg.ymlRequests >= 4, 'geen controles uitgevoerd');
+    await closeAbout();
+  } finally { feed.close(); }
+});
+
+await scenario('42. Updates: melding, releasenotities, Later; zonder ondertekening alleen verwijzen, geen installatie', async () => {
+  const feed = await startFeed();
+  try {
+    feed.cfg.version = '9.9.9';
+    // automatische controle (aan, nog nooit gecontroleerd): melding verschijnt vanzelf kort na het opstarten
+    await relaunch({ CV_STUDIO_UPDATE_FEED: feed.url }, null);
+    const banner = page.getByTestId('update-banner');
+    await banner.waitFor({ timeout: 15000 });
+    assert((await banner.innerText()).includes('Update beschikbaar') && (await banner.innerText()).includes('CV Studio 9.9.9 is beschikbaar.'), 'tekst van de melding: ' + await banner.innerText());
+    assert(await page.getByTestId('update-go').count() === 0, 'Bijwerken getoond terwijl automatisch installeren geblokkeerd is');
+    assert(await page.getByTestId('update-open').count() === 1 && await page.getByTestId('update-later').count() === 1 && await page.getByTestId('update-notes-toggle').count() === 1, 'knoppen: naar downloadpagina, Later en Wat is er nieuw?');
+    assert(/niet beschikbaar.*ondertekend/s.test(await page.getByTestId('update-blocked').innerText()), 'uitleg over ondertekening ontbreekt');
+    await page.getByTestId('update-notes-toggle').click();
+    assert((await page.getByTestId('update-notes').innerText()).includes('Nieuwe titelbalk'), 'releasenotities niet getoond');
+    await page.evaluate(fs.readFileSync(path.join(root, 'node_modules/axe-core/axe.min.js'), 'utf8'));
+    const axeBanner = await page.evaluate(async () => (await window.axe.run({ include: [['[data-testid="update-banner"]']] }, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'best-practice'] } })).violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id));
+    assert(axeBanner.length === 0, 'axe op de updatemelding: ' + axeBanner.join());
+    await page.screenshot({ path: path.join(out, 'update-melding.png') });
+    await page.getByTestId('update-later').click();
+    assert(await banner.count() === 0, 'Later sluit de melding niet');
+    assert(feed.cfg.exeRequests === 0, 'er is gedownload zonder vertrouwde ondertekening');
+    // de controle is bewaard; de app blijft bruikbaar tijdens de melding
+    const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    assert(typeof saved.lastUpdateCheck === 'number' && /9\.9\.9/.test(saved.lastUpdateResult), 'controleresultaat niet bewaard: ' + JSON.stringify(saved));
+    await about();
+    assert(/ondertekend/.test(await page.getByTestId('upd-blocked').innerText()), 'About mist de uitleg');
+    assert(/GitHub/.test(await page.getByTestId('upd-privacy').innerText()) && /geen cv-inhoud/.test(await page.getByTestId('upd-privacy').innerText()) && /telemetrie/.test(await page.getByTestId('upd-privacy').innerText()), 'privacyuitleg');
+    assert(!/—/.test(await page.getByTestId('about-dialog').innerText()), 'em-streep in About');
+    await page.screenshot({ path: path.join(out, 'over-updates.png') });
+    // automatisch controleren uitzetten blijft bewaard na herstart en voorkomt de volgende automatische controle
+    await page.getByTestId('upd-auto').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="upd-auto"]')?.checked === false, null, { timeout: 5000 }).catch(() => {});
+    assert(!(await page.getByTestId('upd-auto').isChecked()), 'schakelaar niet uit');
+    await closeAbout();
+    await app.close();
+    assert(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).autoCheckUpdates === false, 'voorkeur niet bewaard');
+    fs.writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')), lastUpdateCheck: null }));
+    const reqs = feed.cfg.ymlRequests;
+    ({ app, page } = await launch({ CV_STUDIO_UPDATE_FEED: feed.url }));
+    await page.waitForTimeout(2500);
+    assert(feed.cfg.ymlRequests === reqs && await page.getByTestId('update-banner').count() === 0, 'automatische controle ondanks uitgezet');
+  } finally { feed.close(); }
+});
+
+await scenario('43. Updates: bijwerken met voortgang, controle van echtheid, mislukken en opnieuw proberen', async () => {
+  const feed = await startFeed();
+  try {
+    feed.cfg.version = '9.9.9';
+    feed.cfg.delay = 120; // 3 MB in ~3 s: voortgang is te zien
+    await relaunch({ CV_STUDIO_UPDATE_FEED: feed.url, CV_STUDIO_UPDATE_TRUST: '1' }, { autoCheckUpdates: true, lastUpdateCheck: null, lastUpdateResult: null });
+    const banner = page.getByTestId('update-banner');
+    await banner.waitFor({ timeout: 15000 });
+    assert(await page.getByTestId('update-go').count() === 1 && await page.getByTestId('update-open').count() === 0, 'met vertrouwde ondertekening: Bijwerken verwacht');
+    // 1. beschadigde download: checksum klopt niet, wordt geweigerd; opnieuw proberen mislukt opnieuw
+    feed.cfg.corrupt = true;
+    await page.getByTestId('update-go').click();
+    await page.waitForSelector('[data-testid="update-banner"][data-kind="error"]', { timeout: 30000 });
+    assert(/geweigerd.*echtheid/s.test(await page.getByTestId('update-error').innerText()), 'geen duidelijke melding bij beschadigde update: ' + await page.getByTestId('update-error').innerText());
+    assert(await page.getByTestId('update-banner').getByText('Herstarten en installeren').count() === 0, 'beschadigde update als klaar gemeld');
+    assert(await page.getByTestId('update-retry').count() === 1, 'Opnieuw proberen ontbreekt');
+    await page.getByTestId('update-retry').click();
+    await page.waitForSelector('[data-testid="update-banner"][data-kind="error"]', { timeout: 30000 });
+    // 2. onderbroken download
+    feed.cfg.corrupt = false;
+    feed.cfg.dropAt = 1_000_000;
+    await page.getByTestId('update-retry').click();
+    await page.waitForSelector('[data-testid="update-banner"][data-kind="error"]', { timeout: 30000 });
+    const msg = await page.getByTestId('update-error').innerText();
+    assert(/onderbroken|mislukt/.test(msg), 'melding bij onderbroken download: ' + msg);
+    assert(await page.locator('.cv-page').isVisible(), 'app niet bruikbaar na mislukte download');
+    // 3. opnieuw proberen met werkende server: voortgang, daarna klaar om te installeren
+    feed.cfg.dropAt = 0;
+    await page.getByTestId('update-retry').click();
+    await page.waitForSelector('[data-testid="update-banner"][data-kind="downloading"]', { timeout: 15000 });
+    const seen = new Set();
+    const t0 = Date.now();
+    while (Date.now() - t0 < 30000) {
+      const k = await page.getByTestId('update-banner').getAttribute('data-kind');
+      if (k === 'ready') break;
+      if (k === 'downloading') seen.add(await page.getByTestId('update-progress').getAttribute('aria-valuenow'));
+      await page.waitForTimeout(150);
+    }
+    assert(await page.getByTestId('update-banner').getAttribute('data-kind') === 'ready', 'update niet klaar');
+    assert([...seen].some((v) => Number(v) > 0 && Number(v) < 100), 'geen tussentijdse voortgang gezien: ' + [...seen].join(','));
+    assert((await page.getByTestId('update-banner').innerText()).includes('Herstarten en installeren') && await page.getByTestId('update-later').count() === 1, 'knoppen Herstarten en installeren / Later');
+    await page.screenshot({ path: path.join(out, 'update-klaar.png') });
+    await page.getByTestId('update-later').click();
+    assert(await page.getByTestId('update-banner').count() === 0, 'Later sluit niet');
+    // de app is niet afgesloten en gaf geen herstart zonder keuze
+    assert(await page.locator('.cv-page').isVisible(), 'app gesloten zonder keuze');
+  } finally { feed.close(); }
+});
+
+await scenario('44. Updates: offline, ontbrekende release en snelheidslimiet geven begrijpelijke meldingen', async () => {
+  const feed = await startFeed();
+  const dead = feed.url;
+  feed.close();
+  await relaunch({ CV_STUDIO_UPDATE_FEED: dead }, { autoCheckUpdates: false });
+  await about();
+  await checkNow();
+  assert(/Geen internetverbinding/.test(await result()) && /offline/.test(await result()), 'offline-melding: ' + await result());
+  assert(await page.getByTestId('upd-check').isEnabled(), 'controleren kan niet opnieuw na een fout');
+  await closeAbout();
+  assert(await page.locator('.cv-page').isVisible(), 'app niet bruikbaar offline');
+  const f2 = await startFeed();
+  try {
+    await relaunch({ CV_STUDIO_UPDATE_FEED: f2.url }, { autoCheckUpdates: false });
+    await about();
+    f2.cfg.ymlStatus = 404;
+    await checkNow();
+    assert(/nog geen gepubliceerde release/.test(await result()), '404-melding: ' + await result());
+    f2.cfg.ymlStatus = 403;
+    await checkNow();
+    assert(/GitHub staat nu even geen verzoeken meer toe/.test(await result()), '403-melding: ' + await result());
+    f2.cfg.ymlStatus = 200; f2.cfg.version = currentVersion;
+    await checkNow();
+    assert(/nieuwste versie/.test(await result()), 'herstel na fout: ' + await result());
+    await closeAbout();
+  } finally { f2.close(); }
+  await relaunch({}, { autoCheckUpdates: true, lastUpdateCheck: null, lastUpdateResult: null });
+});
+
+await scenario('45. Toegankelijkheid (axe-core) van lijst, titelbalk, About en updatemelding', async () => {
+  await page.evaluate(fs.readFileSync(path.join(root, 'node_modules/axe-core/axe.min.js'), 'utf8')); // via CDP: de strikte CSP blijft ongemoeid
+  const run = (include) => page.evaluate(async (inc) => {
+    const r = await window.axe.run({ include: inc }, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } });
+    return r.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id}: ${v.nodes.slice(0, 2).map((n) => n.target.join(' ')).join(' | ')}`);
+  }, include);
+  const bad = [];
+  bad.push(...(await run([['[data-testid="titlebar"]']])).map((x) => 'titelbalk ' + x));
+  const sk = await open(page, 'skills');
+  if (!(await sk.getByTestId('skill-0').count())) await sk.getByTestId('skill-add').click();
+  await sk.getByTestId('skill-0-list').click();
+  await sk.getByTestId('skill-0-list').fill('Ja');
+  await page.getByTestId('skill-0-list-popup').waitFor();
+  bad.push(...(await run([['.combo-pop'], ['[data-testid="sec-skills"]']])).map((x) => 'skill-lijst ' + x));
+  await page.keyboard.press('Escape');
+  await sk.getByTestId('skill-0-name-chevron').click();
+  await page.getByTestId('skill-0-name-popup').waitFor();
+  bad.push(...(await run([['.combo-pop']])).map((x) => 'categorie-lijst ' + x));
+  await page.keyboard.press('Escape');
+  await sk.getByTestId('sec-skills-expand').click();
+  await page.getByTestId('sec-experience-menu').click();
+  bad.push(...(await run([['.menu-pop']])).map((x) => 'verplaatsmenu ' + x));
+  await page.keyboard.press('Escape');
+  await about();
+  bad.push(...(await run([['[data-testid="about-dialog"]']])).map((x) => 'about ' + x));
+  await closeAbout();
+  assert(bad.length === 0, 'axe-schendingen:\n     ' + bad.join('\n     '));
 });
 
 await app.close();

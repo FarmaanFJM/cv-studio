@@ -1,5 +1,45 @@
 # Changelog
 
+## 3.1.0 - Simpler editor, branding, desktop shell and update check
+This is a feature and UX release. The data format is unchanged (still v4). Existing CVs open exactly as before, with the changes listed under "Compatibility".
+
+**Simpler editor**
+- One border per section. Groups and settings inside a section are separated by whitespace and a thin divider, not by nested cards or colored panels. The segmented controls and switches use a neutral selected state; the accent color is kept for focus, the primary action and drop targets.
+- The `Hoofd | Aanvullend` buttons are gone. Move sections between *Hoofdinhoud*, *Aanvullende inhoud* and *Verborgen* by dragging: an insertion line shows where the section lands, the destination category is highlighted, the editor scrolls automatically near its edges, and dropping never expands a section. Empty categories accept drops.
+- Keyboard and menu alternative: `... > Verplaatsen naar` (with a check mark on the current place) plus the existing Up/Down menu items and arrow-key reordering on the drag handle. Focus returns to the handle after moving.
+- Template rules are respected. In the Header template the contact block has a fixed place and cannot be dragged. In Minimal, reordering keeps every section's stored zone, so switching templates never loses placement.
+
+**Skills**
+- Presentation is now **Tekst | Chips**. Organization stays **Lijst | Groepen | Niveaus**.
+- Skills are added like tags: type, pick a suggestion with Tab, Enter or the mouse, the field clears and keeps focus. Arrow keys move through the suggestions, Escape closes the list without touching your text, and without an active suggestion Tab moves on as usual. Custom names always work. Duplicates in a group are ignored regardless of capitalization and spaces, and your own capitalization is kept.
+- The chevron opens a searchable catalog with categories and suggestions for the group's category. The catalog and all presets are stored locally (400+ skills).
+- Skill group presets: Programmeertalen, Frameworks & Libraries, Tools, DevOps, Databases, Cloud, Testing, Game Development and more, plus general categories such as Communicatie, Samenwerking, Organisatie, Planning, Leiderschap, Klantenservice, Administratie, Design, Microsoft Office, Analyse, Onderzoek, Projectmanagement and Presenteren. Choosing a category only creates the group; it never adds skills. Programmeertalen is separate from the *Talen* section for spoken languages.
+- Project tech stacks use the same two presentations and the same input.
+- A skill group without skills no longer prints an empty heading in the CV.
+
+**Over mij**
+- The profile section is now called *Over mij* for new CVs, with the input label *Korte introductie*. Existing sections keep their title (rename it under *Titel in cv*); the internal type and the text are unchanged.
+
+**Branding and desktop shell**
+- CV Studio logo for the window, taskbar, executable, installer, uninstaller, shortcuts and the title bar. Multi-size ICO (16 to 256 px), transparent PNGs and the generation script are in `assets/brand` and `build`. See `assets/brand/README.md` for how the transparent version was made and why the Windows icon sits on a charcoal tile.
+- Custom 44 px title bar (logo, name, version, current CV name) with the native window buttons drawn by Electron (`titleBarStyle: 'hidden'` with `titleBarOverlay`). Drag, double-click to maximize, Snap, edge resizing and DPI scaling stay native. No window IPC was added. The hidden PDF window is unchanged, so the app shell never appears in exports.
+
+**Updates**
+- *Over CV Studio* (the info button in the title bar) shows the version, a check button, the automatic-check switch, the last result and the available version, and explains that a check contacts GitHub but sends no CV content.
+- When a newer stable version exists, a quiet notification offers the release notes ("Wat is er nieuw?") and a link to the release page. Pre-releases, drafts and older versions are ignored. Offline, missing releases and rate limits give clear Dutch messages.
+- Automatic **installation is disabled** because the installers are not code-signed; see `docs/UPDATES.md` for the investigation and what is needed. The download, progress, restart-after-save path exists and is tested against a controlled feed, but it is not enabled in release builds and installer replacement has not been verified on native Windows.
+
+**Release pipeline**
+- Update metadata (`latest.yml`, `.blockmap`) is generated with an explicit GitHub publish configuration. The workflow verifies tag, version, commit, installer, checksums, update metadata and license files, and only ever creates a draft. See `docs/RELEASING.md`.
+
+**Compatibility and migration** (tested with generated 3.0.0 and 3.0.1 data in `tests/fixtures`)
+- Old skill presentations are migrated when a file is read: `inline` (icon + label) and `list` become **Chips** when icons were visible and **Tekst** when they were not. All skills, categories, custom icons and icon settings are kept. Visible changes: a former *Lijst* presentation no longer shows bullets, and a former *Icoon + label* gets the chip outline. The same applies to project tech stacks.
+- Moving sections in the Minimal template no longer rewrites their stored zones.
+
+**Under the hood**
+- New dependencies: `electron-updater` (bundled, MIT) and `resedit` (build only, MIT) to embed the icon and version information in the executable without Wine. `licenses/` and `THIRD_PARTY_NOTICES.md` cover the new runtime packages.
+- The package scripts `dist` and `dist:dir` pass `--publish never`.
+
 ## 3.0.1 - Open source packaging
 - The Windows installer now includes `LICENSE`, `THIRD_PARTY_NOTICES.md` and the `licenses/` folder (installed in `resources/`).
 - Added the MIT license, an English README, `CONTRIBUTING.md` and issue and pull request templates to the repository.

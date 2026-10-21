@@ -43,6 +43,7 @@ Please run at least the type check and the unit tests before you open a pull req
 - **Keep changes focused.** One fix or feature per pull request is easier to review.
 - **Follow the existing style.** Match the naming, structure and comment density of the code around your change. TypeScript is strict.
 - **CV rendering.** The CV must stay exactly one A4 page (210 by 297 mm), and the preview and the exported PDF must look the same. The PDF text must remain selectable. Add or update a test when you change rendering.
+- **Updates and releases.** Do not weaken update verification to make something install. Automatic installation stays off until installers are code-signed (see `docs/UPDATES.md`). Releases are drafts created by the workflow and published by hand (`docs/RELEASING.md`).
 - **Saved data.** If you change the data model, keep old saved files working. Add a migration in `src/shared/model.ts` and a unit test with an older data format.
 - **Interface components.** Components in `src/renderer/ui/` must stay usable with the keyboard: visible focus, correct roles and labels, and tooltips for icon-only buttons. The end-to-end tests include an accessibility scan (axe-core).
 - **Fictional data only.** Screenshots, test data and examples must not contain real personal information.

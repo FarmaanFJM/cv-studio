@@ -82,7 +82,7 @@ export function LayoutPanel({ cv, update, onOpenContent }: { cv: CV; update: Upd
             (['primary', 'supplementary', 'hidden'] as const).map((z) => (
               <div key={z} className="po-row">
                 <span className="po-label">{z === 'primary' ? 'Hoofdinhoud' : z === 'supplementary' ? 'Aanvullende inhoud' : 'Verborgen'}</span>
-                <span className="po-items">{names(z).join(' · ') || '—'}</span>
+                <span className="po-items">{names(z).join(' · ') || 'Geen'}</span>
               </div>
             ))
           )}
