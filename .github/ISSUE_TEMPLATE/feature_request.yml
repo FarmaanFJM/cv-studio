@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CV Studio aims to stay simple and offline. Ideas that need accounts, cloud services or tracking will not be accepted. Please do not include real CV data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed functionality
+      description: How could CV Studio help with this?
+    validations:
+      required: true
+  - type: textarea
+    id: benefit
+    attributes:
+      label: Expected benefit
+      description: Who would use it and how does it improve their CV?
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples or screenshots (optional)
+      description: Links or images of similar features. Remove personal information first.

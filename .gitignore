@@ -4,3 +4,15 @@ dist-electron
 release
 e2e/out
 *.log
+
+# secrets and local files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+coverage/

@@ -1,17 +1,23 @@
 # Changelog
 
-## 3.0.0 — UX-herontwerp
-- Lokale, herbruikbare `Summa*`-componenten (knop, tooltip, schakelaar, segmented, select, getalveld + slider, kleurkiezer, lettertypekiezer, veld, accordion, sectiekaart, menu) met Summa-ontwerptokens.
-- Duidelijke taakverdeling: **Inhoud** (wat), **Layout** (structuur), **Stijl** (uiterlijk); onderdeelspecifieke opties blijven in het onderdeel. Progressive disclosure via accordions.
-- Technologie-iconen: zichtbaarheid en kleur zijn nu aparte instellingen. Globaal *Toon iconen* + kleurmodus (Automatisch / Merkkleuren / Monochroom) in Stijl; per onderdeel *Standaardinstelling gebruiken* of *Eigen instellingen*. Expliciete voorrang: globaal → onderdeel → per technologie → kleurmodus → contrastterugval. Weergave (*Tekst*, *Icoon + label*, *Lijst*, *Chips*) is los van de zichtbaarheid; *Tekst* toont nooit iconen. Contacticonen staan los van technologie-iconen.
-- Sectiekaarten met consistente acties (uitklappen, plaatsing, zichtbaarheid, sleepgreep met toetsenbordbediening, ⋯-menu); highlight in de preview bij selecteren en verplaatsen.
-- Preview met zoom (−/+, Ctrl+scrollwiel, passend); compactere kop; editor werkt van smal tot breed zonder overloop.
-- Toegankelijkheid: zichtbare focus, rol/naam voor alle controls, toetsenbordbediening, tooltips voor icoonknoppen, lokale validatiemeldingen, `prefers-reduced-motion`, axe-core-controle in de tests.
-- Getalvelden: typen, pijltjestoetsen en −/+ zonder terugspringen; sliders met zichtbaar bereik.
-- Versie 3.0.0 zichtbaar in de editor; opslagformaat v4 met automatische migratie van v1–v3 (oude tech-instellingen behouden hun uiterlijk).
+## Unreleased
+- Added the MIT `LICENSE`, an English README with screenshots, `CONTRIBUTING.md`, issue and pull request templates.
+- Rewrote `THIRD_PARTY_NOTICES.md` and added `licenses/` with the full texts of the bundled font, icon and library licenses. The next installer build will include them.
+- Replaced the monochrome Java and Azure logo paths with the exact paths from Simple Icons v5.0.0 (CC0). The earlier paths were reproduced by hand and did not match their source.
+- Windows build workflow now runs on version tags or manually, and only prepares a draft pre-release.
+
+## 3.0.0 - UX redesign
+- Reusable `Summa*` interface components with the Summa design tokens.
+- Clear split between **Content** (what is on the CV), **Layout** (structure) and **Style** (appearance), with progressive disclosure.
+- Technology icons: visibility and color are separate settings. Global *Toon iconen* plus color mode (Automatisch, Merkkleuren, Monochroom), and per section either the default or its own settings. Explicit precedence: global, section, per technology, color mode, contrast fallback. The *Tekst* presentation never shows icons. Contact icons are independent.
+- Consistent section cards (expand, placement, visibility, drag handle with keyboard support, overflow menu) and a highlight in the preview when selecting or moving a section.
+- Preview zoom (buttons, Ctrl+wheel, fit), a compact header, and an editor that works from narrow to wide.
+- Accessibility: visible focus, roles and names for all controls, keyboard operation, tooltips for icon-only buttons, local validation messages, reduced-motion support, axe-core checks in the tests.
+- Number fields accept typing, arrow keys and +/- without jumping back; sliders show their range.
+- Version shown in the editor. Storage format v4 with automatic migration from v1 to v3.
 
 ## 2.0.0
-Sjablonen (Zijbalk, Kopbalk, Minimaal), positie-onafhankelijke zones, technologie-iconen met merkkleuren, uitgebreide stijl- en kleurinstellingen.
+Templates (Sidebar, Header, Minimal), position-independent content areas, technology icons with brand colors, extended style and color settings.
 
 ## 1.0.0
-Eerste versie: editor, A4-preview, PDF-export, lokale opslag, versies.
+First version: editor, A4 preview, PDF export, local storage and CV versions.
