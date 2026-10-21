@@ -1,24 +1,91 @@
 name: Windows build
+
+# Builds the Windows installer on a hosted Windows runner and prepares a DRAFT, PRE-RELEASE on GitHub.
+# It never publishes a release by itself and never claims verification: the release notes only state
+# the outcome of the automated checks, and the maintainer decides when to publish.
+#
+# Trigger: push a version tag (for example v3.0.1), or run it manually from the Actions tab.
+# Hosted Windows runners need available GitHub Actions minutes. If no runner can be started
+# (for example because of billing limits) the run fails before any step; do not re-run it repeatedly.
+
 on:
   push:
-    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      smoke: ${{ steps.smoke.outcome }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with:
+          node-version: 22
+          cache: npm
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run dist
-      # Rooktest van de echte Windows-build: dezelfde e2e-scenario's tegen de gebouwde .exe
-      - run: node e2e/run.mjs
+      # The same end-to-end scenarios as on Linux, run against the packaged Windows app.
+      # A failure here does not stop the build, but it is recorded in the release notes.
+      - id: smoke
+        continue-on-error: true
+        run: node e2e/run.mjs
         env:
           CV_STUDIO_EXE: ${{ github.workspace }}\release\win-unpacked\CV Studio.exe
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem release\CV-Studio-Setup-*.exe | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -Append -Encoding ascii release\SHA256SUMS.txt
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: CV-Studio-Setup
-          path: release/CV-Studio-Setup-*.exe
+          name: CV-Studio-Windows
+          path: |
+            release/CV-Studio-Setup-*.exe
+            release/SHA256SUMS.txt
+
+  draft-release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: CV-Studio-Windows
+      - name: Create draft pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          SMOKE: ${{ needs.build.outputs.smoke }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A release for $TAG already exists. Not touching it; the installer is available as a workflow artifact."
+            exit 0
+          fi
+          if [ "$SMOKE" = "success" ]; then
+            CHECKS="Automated Windows checks (unit tests and end-to-end scenarios against the packaged app): passed."
+          else
+            CHECKS="Automated Windows end-to-end scenarios against the packaged app did not pass (result: $SMOKE). Treat this build as unverified."
+          fi
+          {
+            echo "Windows installer for $TAG, built from commit $GITHUB_SHA."
+            echo
+            echo "$CHECKS"
+            echo
+            echo "Installation: download the installer, run it and open CV Studio. The installer is not code-signed, so Windows SmartScreen may show a warning (More info, then Run anyway)."
+            echo
+            echo "SHA-256 checksums are in SHA256SUMS.txt."
+          } > notes.md
+          gh release create "$TAG" CV-Studio-Setup-*.exe SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --title "CV Studio ${TAG#v}" --notes-file notes.md --draft --prerelease
