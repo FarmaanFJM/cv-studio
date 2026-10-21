@@ -63,7 +63,7 @@ export const CvPage = forwardRef<HTMLDivElement, Props>(function CvPage({ cv, pl
           </div>
           {photo && <PhotoView photo={photo} size="26mm" />}
         </div>
-        <div className="col-main">{blocks(visible.filter((s) => s.type !== 'personal'))}</div>
+        <div className="col-main" data-region="primary">{blocks(visible.filter((s) => s.type !== 'personal'))}</div>
       </div>
     );
   }
@@ -71,11 +71,11 @@ export const CvPage = forwardRef<HTMLDivElement, Props>(function CvPage({ cv, pl
   // ---------- Header: brede kopbalk ----------
   if (cv.template === 'header') {
     const rest = visible.filter((s) => s.type !== 'personal');
-    const side = rest.filter((s) => s.zone === 'side');
-    const main = rest.filter((s) => s.zone === 'main');
+    const side = rest.filter((s) => s.zone === 'supplementary');
+    const main = rest.filter((s) => s.zone === 'primary');
     return (
       <div className={cls} style={style} ref={ref}>
-        <header className="band" data-sec="header" data-title="Kopbalk" onClick={pickPersonal}>
+        <header className="band" data-region="header" data-sec="header" data-title="Kopbalk" onClick={pickPersonal}>
           {photo && <PhotoView photo={photo} size="var(--photo)" />}
           <div className="band-id">
             <h1 className={!name && placeholders ? 'ph' : ''}>{name || (placeholders ? 'Jouw naam' : '')}</h1>
@@ -84,24 +84,24 @@ export const CvPage = forwardRef<HTMLDivElement, Props>(function CvPage({ cv, pl
           {showContact && contactRows(cv).length > 0 && <div className="band-contact"><ContactList cv={cv} /></div>}
         </header>
         <div className={`hbody ${side.length ? '' : 'no-side'}`}>
-          {side.length > 0 && <aside className="col-side">{blocks(side)}</aside>}
-          <main className="col-main">{blocks(main)}</main>
+          {side.length > 0 && <aside className="col-side" data-region="supplementary">{blocks(side)}</aside>}
+          <main className="col-main" data-region="primary">{blocks(main)}</main>
         </div>
       </div>
     );
   }
 
   // ---------- Sidebar: sterke zijbalk links ----------
-  const side = visible.filter((s) => s.zone === 'side');
-  const main = visible.filter((s) => s.zone === 'main');
+  const side = visible.filter((s) => s.zone === 'supplementary');
+  const main = visible.filter((s) => s.zone === 'primary');
   return (
     <div className={cls} style={style} ref={ref}>
-      <aside className="col-side side">
+      <aside className="col-side side" data-region="supplementary">
         {photo && <div className="side-photo" data-sec="photo" data-title="Foto"><PhotoView photo={photo} size="var(--photo)" /></div>}
         {st.nameInSidebar && nameBlock}
         {blocks(side)}
       </aside>
-      <main className="col-main main">
+      <main className="col-main main" data-region="primary">
         {!st.nameInSidebar && nameBlock}
         {blocks(main)}
       </main>

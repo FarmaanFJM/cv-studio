@@ -139,8 +139,8 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .zone.drop-target { background: rgba(183, 247, 54, 0.07); outline: 1px dashed var(--accent); }
 .zone-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 2px 4px 8px; display: flex; gap: 8px; align-items: center; }
 .zone-title .count { background: var(--elevated); border-radius: 8px; padding: 0 7px; font-size: 10.5px; letter-spacing: 0; }
-.zone-side .zone-title::before { content: ''; width: 8px; height: 14px; background: var(--accent); border-radius: 2px; }
-.zone-main .zone-title::before { content: ''; width: 14px; height: 14px; border: 2px solid var(--muted); border-radius: 3px; }
+.zone-supplementary .zone-title::before { content: ''; width: 8px; height: 14px; background: var(--accent); border-radius: 2px; }
+.zone-primary .zone-title::before { content: ''; width: 14px; height: 14px; border: 2px solid var(--muted); border-radius: 3px; }
 .zone-empty { color: #4b5056; text-align: center; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; }
 .card { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; background: var(--bg); }
 .card.open { border-color: #3d4247; background: #101214; }
@@ -193,6 +193,11 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .page-scale { transform-origin: top left; width: 210mm; height: 297mm; }
 .cv-page .is-over { outline: 0.5mm solid #dc2626; background: rgba(220, 38, 38, 0.12); }
 .cv-page .sec, .cv-page .head { cursor: pointer; }
+@keyframes cv-flash {
+  0%, 65% { box-shadow: 0 0 0 1.4mm #b7f736; outline-color: #0c0d0e; }
+  100% { box-shadow: 0 0 0 1.4mm rgba(183, 247, 54, 0); outline-color: rgba(12, 13, 14, 0); }
+}
+.cv-page .flash { outline: 0.5mm solid #0c0d0e; outline-offset: 1.4mm; border-radius: 1mm; animation: cv-flash 1.8s ease-out forwards; }
 
 .modal-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal { background: var(--elevated); padding: 20px; border-radius: 12px; width: 380px; border: 1px solid #3a3e42; }

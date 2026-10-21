@@ -2,7 +2,11 @@
 import { isHex } from './color';
 
 export type TemplateId = 'sidebar' | 'header' | 'minimal';
-export type Zone = 'side' | 'main';
+/**
+ * Plaatsing is positie-onafhankelijk: 'primary' = hoofdinhoud, 'supplementary' = aanvullende inhoud.
+ * Elk sjabloon bepaalt zelf waar (linkerkolom, rechterkolom, kop, …) een zone getoond wordt.
+ */
+export type Zone = 'primary' | 'supplementary';
 export type PlaceTarget = Zone | 'hidden';
 export type PhotoShape = 'round' | 'square';
 export type SkillMode = 'flat' | 'grouped' | 'levels';
@@ -58,7 +62,7 @@ export type Section =
 
 export interface StyleSettings {
   accent: string;
-  sidebarBg: string; // zijbalk / kopbalk
+  sidebarBg: string; // kleur van het gekleurde vlak (zijbalk of kopbalk, afhankelijk van het sjabloon)
   headingColor: string; // '' = accentkleur
   textColor: string; // '' = standaard
   dividerColor: string; // '' = standaard
@@ -89,7 +93,7 @@ export interface CV {
 }
 
 export interface AppState {
-  version: 2;
+  version: 3;
   activeId: string;
   cvs: CV[];
   swatches: string[]; // eigen opgeslagen kleuren
@@ -151,7 +155,7 @@ export const SECTION_TITLES: Record<SectionType, string> = {
 
 export const SKILL_LEVEL_NAMES = ['Beste', 'Goed', 'Bekend met', 'Interesse in'];
 
-export const defaultZone = (t: SectionType): Zone => (t === 'personal' || t === 'skills' || t === 'languages' ? 'side' : 'main');
+export const defaultZone = (t: SectionType): Zone => (t === 'personal' || t === 'skills' || t === 'languages' ? 'supplementary' : 'primary');
 
 export const emptyPersonal = (): Personal => ({
   fullName: '', title: '', email: '', phone: '', location: '', birthDate: '', linkedin: '', github: '', website: ''
@@ -183,17 +187,17 @@ export interface SectionPreset { key: string; label: string; zone: Zone; make: (
 const custom = (title: string, zone: Zone, mode: 'text' | 'list' | 'keyvalue'): Section =>
   ({ id: uid(), type: 'custom', title, visible: true, zone, mode, text: '', items: [] });
 
-export function newCustomSection(): Section { return custom('Nieuw onderdeel', 'main', 'text'); }
+export function newCustomSection(): Section { return custom('Nieuw onderdeel', 'primary', 'text'); }
 
-/** Snelle voorbeelden voor extra onderdelen (vooral voor de zijbalk). */
+/** Snelle voorbeelden voor extra onderdelen (vooral voor aanvullende inhoud). */
 export const SECTION_PRESETS: SectionPreset[] = [
-  { key: 'interests', label: 'Interesses', zone: 'side', make: () => custom('Interesses', 'side', 'list') },
-  { key: 'certs', label: 'Certificaten', zone: 'side', make: () => custom('Certificaten', 'side', 'list') },
-  { key: 'links', label: 'Links', zone: 'side', make: () => custom('Links', 'side', 'keyvalue') },
-  { key: 'about', label: 'Over mij', zone: 'side', make: () => custom('Over mij', 'side', 'text') },
-  { key: 'extra', label: 'Extra informatie', zone: 'side', make: () => custom('Extra informatie', 'side', 'text') },
-  { key: 'stats', label: 'Gegevens / maten', zone: 'side', make: () => custom('Gegevens', 'side', 'keyvalue') },
-  { key: 'custom-main', label: 'Eigen onderdeel (hoofd)', zone: 'main', make: () => custom('Nieuw onderdeel', 'main', 'text') }
+  { key: 'interests', label: 'Interesses', zone: 'supplementary', make: () => custom('Interesses', 'supplementary', 'list') },
+  { key: 'certs', label: 'Certificaten', zone: 'supplementary', make: () => custom('Certificaten', 'supplementary', 'list') },
+  { key: 'links', label: 'Links', zone: 'supplementary', make: () => custom('Links', 'supplementary', 'keyvalue') },
+  { key: 'about', label: 'Over mij', zone: 'supplementary', make: () => custom('Over mij', 'supplementary', 'text') },
+  { key: 'extra', label: 'Extra informatie', zone: 'supplementary', make: () => custom('Extra informatie', 'supplementary', 'text') },
+  { key: 'stats', label: 'Gegevens / maten', zone: 'supplementary', make: () => custom('Gegevens', 'supplementary', 'keyvalue') },
+  { key: 'custom-main', label: 'Eigen onderdeel (hoofdinhoud)', zone: 'primary', make: () => custom('Nieuw onderdeel', 'primary', 'text') }
 ];
 
 export function emptySection(type: SectionType): Section {
@@ -228,7 +232,7 @@ export function createEmptyCv(name = 'Mijn cv'): CV {
 /** In het minimale (eenkoloms) sjabloon bestaan zones niet: alles zichtbaars staat in één kolom. */
 export function zoneOf(cv: Pick<CV, 'template'>, s: Section): PlaceTarget {
   if (!s.visible) return 'hidden';
-  return cv.template === 'minimal' ? 'main' : s.zone;
+  return cv.template === 'minimal' ? 'primary' : s.zone;
 }
 
 /** Verplaats een onderdeel naar een zone (of verborgen), optioneel vóór een ander onderdeel. */
@@ -297,6 +301,13 @@ function sanitizePhoto(v: unknown): Photo | null {
   };
 }
 
+/** Accepteert ook de oude, positiegebonden waarden ('side'/'main') uit eerder opgeslagen cv's. */
+function normalizeZone(v: unknown, d: Zone): Zone {
+  if (v === 'primary' || v === 'main') return 'primary';
+  if (v === 'supplementary' || v === 'side') return 'supplementary';
+  return d;
+}
+
 function sanitizeSection(raw: unknown): Section | null {
   if (!isObj(raw)) return null;
   const type = raw.type;
@@ -307,7 +318,7 @@ function sanitizeSection(raw: unknown): Section | null {
     id: id(raw.id),
     title: str(raw.title, 120) || SECTION_TITLES[t],
     visible: bool(raw.visible, true),
-    zone: oneOf(raw.zone, ['side', 'main'] as const, defaultZone(t))
+    zone: normalizeZone(raw.zone, defaultZone(t))
   };
   switch (t) {
     case 'personal': return { ...base, type: 'personal' };
@@ -412,7 +423,7 @@ export function sanitizeState(raw: unknown): AppState {
   for (const c of cvs) { while (ids.has(c.id)) c.id = uid(); ids.add(c.id); }
   const activeId = isObj(raw) && typeof raw.activeId === 'string' && ids.has(raw.activeId) ? raw.activeId : cvs[0].id;
   const swatches = isObj(raw) && Array.isArray(raw.swatches) ? raw.swatches.filter(isHex).map((c) => c.toLowerCase()).slice(0, 24) : [];
-  return { version: 2, activeId, cvs, swatches };
+  return { version: 3, activeId, cvs, swatches };
 }
 
 /** Kopie met nieuwe id's, zodat het origineel nooit wordt overschreven. */

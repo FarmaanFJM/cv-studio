@@ -300,25 +300,31 @@ await scenario('13. Gevuld (fictief) voorbeeld exporteert in alle templates naar
 });
 
 
-await scenario('14. Zones: onderdeel naar zijbalk/hoofd/verborgen, ook met slepen', async () => {
+await scenario('14. Zones: onderdeel naar hoofd/aanvullend/verborgen, ook met slepen', async () => {
   await page.getByTestId('tab-layout').click();
   await page.getByTestId('tpl-sidebar').click();
   await page.getByTestId('tab-sections').click();
   const inSide = (t) => page.locator(`.col-side [data-title="${t}"]`).count();
   const inMain = (t) => page.locator(`.col-main [data-title="${t}"]`).count();
   assert(await inMain('Profiel') === 1 && await inSide('Profiel') === 0, 'profiel start in hoofd');
-  await page.getByTestId('sec-profile-zone-side').click();
-  assert(await inSide('Profiel') === 1 && await inMain('Profiel') === 0, 'profiel niet naar zijbalk');
-  assert(await page.locator('[data-testid="zone-side"] [data-testid="sec-profile"]').count() === 1, 'editor toont zone niet');
-  await page.getByTestId('sec-profile-zone-main').click();
+  assert(await page.getByTestId('zone-primary').locator('.zone-title').innerText().then((t) => /Hoofdinhoud/i.test(t)), 'label Hoofdinhoud');
+  assert(await page.getByTestId('zone-supplementary').locator('.zone-title').innerText().then((t) => /Aanvullende inhoud/i.test(t)), 'label Aanvullende inhoud');
+  assert(!/Zijbalk|Linker|Hoofdgedeelte/.test(await page.getByTestId('section-list').innerText()), 'oude positiegebonden labels zichtbaar');
+  await page.getByTestId('sec-profile-zone-supplementary').click();
+  assert(await inSide('Profiel') === 1 && await inMain('Profiel') === 0, 'profiel niet naar aanvullende inhoud');
+  await page.waitForSelector('.cv-page [data-title="Profiel"].flash', { timeout: 2000 });
+  await page.screenshot({ path: path.join(out, 'flash-bestemming.png') });
+  await page.waitForFunction(() => !document.querySelector('.cv-page .flash'), null, { timeout: 4000 });
+  assert(await page.locator('[data-testid="zone-supplementary"] [data-testid="sec-profile"]').count() === 1, 'editor toont zone niet');
+  await page.getByTestId('sec-profile-zone-primary').click();
   assert(await inMain('Profiel') === 1, 'profiel niet terug');
   await page.getByTestId('sec-languages-toggle').click();
   assert(await page.locator('[data-testid="zone-hidden"] [data-testid="sec-languages"]').count() === 1, 'niet in verborgen');
   await page.getByTestId('sec-languages-toggle').click();
   // slepen van zijbalk naar hoofd
-  await page.getByTestId('sec-skills').locator('.handle').dragTo(page.getByTestId('zone-main'));
-  assert(await inMain('Vaardigheden') === 1 || await page.locator('[data-testid="zone-main"] [data-testid="sec-skills"]').count() === 1, 'slepen naar hoofd werkt niet');
-  await page.getByTestId('sec-skills-zone-side').click();
+  await page.getByTestId('sec-skills').locator('.handle').dragTo(page.getByTestId('zone-primary'));
+  assert(await inMain('Vaardigheden') === 1 || await page.locator('[data-testid="zone-primary"] [data-testid="sec-skills"]').count() === 1, 'slepen naar hoofd werkt niet');
+  await page.getByTestId('sec-skills-zone-supplementary').click();
 });
 
 await scenario('15. Vaardigheden: lijst, groepen en niveaus (chips, stippen)', async () => {
@@ -340,13 +346,13 @@ await scenario('15. Vaardigheden: lijst, groepen en niveaus (chips, stippen)', a
 await scenario('16. Extra zijbalk-onderdelen (Interesses, Links) toevoegen', async () => {
   await page.getByTestId('add-section').click();
   await page.getByTestId('add-interests').click();
-  const card = page.locator('[data-testid="zone-side"] [data-testid="sec-custom"]').last();
+  const card = page.locator('[data-testid="zone-supplementary"] [data-testid="sec-custom"]').last();
   await card.getByTestId('custom-add').click();
   await card.getByTestId('custom-0-text').fill('Wandelen');
   assert(await page.locator('.col-side [data-title="Interesses"]').count() === 1, 'interesses niet in zijbalk');
   await page.getByTestId('add-section').click();
   await page.getByTestId('add-links').click();
-  const links = page.locator('[data-testid="zone-side"] [data-testid="sec-custom"]').last();
+  const links = page.locator('[data-testid="zone-supplementary"] [data-testid="sec-custom"]').last();
   await links.getByTestId('custom-add').click();
   await links.getByTestId('custom-0-text').fill('Portfolio');
   assert(await page.locator('.col-side [data-title="Links"]').count() === 1, 'links niet in zijbalk');
@@ -443,7 +449,7 @@ await scenario('21. Zijbalk-variant: naam in zijbalk, datums links, titel+lijn, 
   await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select"]').selectedOptions[0].textContent));
   await page.getByTestId('tab-layout').click();
   await page.getByTestId('tpl-sidebar').click();
-  await page.locator('label.toggle', { hasText: 'Naam in zijbalk' }).click();
+  await page.locator('label.toggle', { hasText: 'Naam bij foto' }).click();
   await page.getByTestId('item-layout-dates-left').click();
   await page.getByTestId('tab-style').click();
   await page.getByTestId('theme-oranje').click();
@@ -461,7 +467,7 @@ await scenario('22. Kopbalk-template: contactblok vast in de kop', async () => {
   await page.getByTestId('tpl-header').click();
   await page.getByTestId('tab-sections').click();
   assert(await page.locator('[data-testid="zone-head"] [data-testid="sec-personal"]').count() === 1, 'contact niet vastgepind');
-  assert(await page.getByTestId('sec-personal-zone-side').count() === 0, 'zone-knoppen bij vastgepind contact');
+  assert(await page.getByTestId('sec-personal-zone-supplementary').count() === 0, 'zone-knoppen bij vastgepind contact');
 });
 
 await app.close();

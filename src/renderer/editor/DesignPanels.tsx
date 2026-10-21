@@ -42,7 +42,7 @@ export function LayoutPanel({ cv, update }: { cv: CV; update: Upd }) {
           <NumberField label="Tussen onderdelen" unit="mm" min={2} max={14} step={0.5} value={st.sectionGap} name="sectionGap" onChange={set('sectionGap')} slider />
           <NumberField label="Tussen items" unit="mm" min={0.5} max={8} step={0.5} value={st.itemGap} name="itemGap" onChange={set('itemGap')} slider />
           {cv.template !== 'minimal' && (
-            <NumberField label="Breedte zijbalk" unit="mm" min={50} max={100} step={1} value={st.sidebarWidth} name="sidebarWidth" onChange={set('sidebarWidth')} slider />
+            <NumberField label="Breedte aanvullend" unit="mm" min={50} max={100} step={1} value={st.sidebarWidth} name="sidebarWidth" onChange={set('sidebarWidth')} slider />
           )}
         </div>
       </div>
@@ -67,7 +67,7 @@ export function LayoutPanel({ cv, update }: { cv: CV; update: Upd }) {
             options={[{ value: 'inline', label: 'Rechts' }, { value: 'dates-left', label: 'Links' }]} />
         </div>
         <Toggle name="toggle-icons" label="Contacticonen" value={st.icons} onChange={set('icons')} />
-        {cv.template === 'sidebar' && <Toggle name="toggle-name-side" label="Naam in zijbalk" value={st.nameInSidebar} onChange={set('nameInSidebar')} />}
+        {cv.template === 'sidebar' && <Toggle name="toggle-name-side" label="Naam bij foto" value={st.nameInSidebar} onChange={set('nameInSidebar')} />}
       </div>
     </div>
   );
@@ -92,7 +92,7 @@ export function StylePanel({ cv, update, swatches, onSaveSwatch }: {
         </div>
         <div className="grid2">
           <ColorField label="Accent" name="color-accent" value={st.accent} onChange={set('accent')} {...common} />
-          <ColorField label={cv.template === 'header' ? 'Kopbalk' : 'Zijbalk'} name="color-sidebar" value={st.sidebarBg} onChange={set('sidebarBg')} {...common} />
+          <ColorField label="Vlak" name="color-sidebar" value={st.sidebarBg} onChange={set('sidebarBg')} {...common} />
           <ColorField label="Koppen" name="color-heading" value={st.headingColor} optional minContrast={3} onChange={set('headingColor')} {...common} />
           <ColorField label="Tekst" name="color-text" value={st.textColor} optional minContrast={4.5} onChange={set('textColor')} {...common} />
           <ColorField label="Lijnen" name="color-divider" value={st.dividerColor} optional onChange={set('dividerColor')} {...common} />

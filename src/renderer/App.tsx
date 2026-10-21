@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { SECTION_TITLES, SPACING_PRESETS } from '../shared/model';
+import { PlaceTarget, SECTION_TITLES, SPACING_PRESETS } from '../shared/model';
 import { api } from './api';
 import { useCvStore } from './store';
 import { FitReport, MM_PX, PAGE_H_MM, PAGE_W_MM, measurePage } from './layout';
@@ -45,6 +45,32 @@ export function App() {
   const paneRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<Tab>('sections');
+  const [flash, setFlash] = useState<{ id: string; n: number } | null>(null);
+  const cvRef = useRef(cv);
+  cvRef.current = cv;
+  const onPlaced = useCallback((id: string, target: PlaceTarget) => {
+    if (target !== 'hidden') setFlash({ id, n: Date.now() });
+  }, []);
+
+  // laat na een verplaatsing kort zien waar het onderdeel in de preview staat (alleen op het scherm, nooit in de PDF)
+  useEffect(() => {
+    if (!flash) return;
+    let t: number | undefined;
+    let el: Element | null = null;
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => {
+      const page = pageRef.current;
+      if (!page) return;
+      const sec = cvRef.current?.sections.find((s) => s.id === flash.id);
+      el = page.querySelector(`[data-sec="${flash.id}"]`)
+        ?? (sec ? page.querySelector(`[data-region="${sec.zone}"]`) : null); // leeg onderdeel: licht de zone zelf op
+      if (!el) return;
+      el.classList.remove('flash');
+      void (el as HTMLElement).offsetWidth;
+      el.classList.add('flash');
+      t = window.setTimeout(() => el?.classList.remove('flash'), 1900);
+    }));
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(t); el?.classList.remove('flash'); };
+  }, [flash]);
 
   const ask = useCallback((title: string, initial: string) =>
     new Promise<string | null>((resolve) => setPrompt({ title, initial, resolve })), []);
@@ -173,7 +199,7 @@ export function App() {
           </span>
         </div>
         <div className="editor-scroll">
-          {tab === 'sections' && <SectionList cv={cv} update={updateCv} fit={fit} openId={openId} setOpenId={setOpenId} />}
+          {tab === 'sections' && <SectionList cv={cv} update={updateCv} fit={fit} openId={openId} setOpenId={setOpenId} onPlaced={onPlaced} />}
           {tab === 'layout' && <LayoutPanel cv={cv} update={updateCv} />}
           {tab === 'style' && <StylePanel cv={cv} update={updateCv} swatches={state.swatches} onSaveSwatch={addSwatch} />}
         </div>
