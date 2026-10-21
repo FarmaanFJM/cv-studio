@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
-- Added the MIT `LICENSE`, an English README with screenshots, `CONTRIBUTING.md`, issue and pull request templates.
-- Rewrote `THIRD_PARTY_NOTICES.md` and added `licenses/` with the full texts of the bundled font, icon and library licenses. The next installer build will include them.
+## 3.0.1 - Open source packaging
+- The Windows installer now includes `LICENSE`, `THIRD_PARTY_NOTICES.md` and the `licenses/` folder (installed in `resources/`).
+- Added the MIT license, an English README, `CONTRIBUTING.md` and issue and pull request templates to the repository.
+- Rewrote `THIRD_PARTY_NOTICES.md` and added full license texts of the bundled fonts, icons and libraries.
 - Replaced the monochrome Java and Azure logo paths with the exact paths from Simple Icons v5.0.0 (CC0). The earlier paths were reproduced by hand and did not match their source.
-- Windows build workflow now runs on version tags or manually, and only prepares a draft pre-release.
+- Version information updated to 3.0.1. README download links point to the releases page.
+- The Windows build workflow runs on version tags or manually and only prepares a draft pre-release.
+- No changes to the data format or the storage location.
 
 ## 3.0.0 - UX redesign
 - Reusable `Summa*` interface components with the Summa design tokens.

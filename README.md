@@ -3,7 +3,7 @@
 A free, offline CV builder for Windows. Fill in your details, pick a template and export a clean one-page PDF.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/FarmaanFJM/cv-studio?label=release)](https://github.com/FarmaanFJM/cv-studio/releases/latest)
+[![Release](https://img.shields.io/github/v/release/FarmaanFJM/cv-studio?include_prereleases&label=release)](https://github.com/FarmaanFJM/cv-studio/releases)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4)
 
 ![CV Studio showing the editor on the left and a live A4 preview of an example CV on the right](docs/images/app-editor.png)
@@ -14,7 +14,7 @@ A free, offline CV builder for Windows. Fill in your details, pick a template an
 
 ## Download
 
-1. Open the [latest release](https://github.com/FarmaanFJM/cv-studio/releases/latest) and download `CV-Studio-Setup-<version>.exe`.
+1. Open the [releases page](https://github.com/FarmaanFJM/cv-studio/releases) and download `CV-Studio-Setup-<version>.exe` from the newest version. Releases are currently marked as pre-releases.
 2. Run the installer.
 3. Start CV Studio and create your CV.
 

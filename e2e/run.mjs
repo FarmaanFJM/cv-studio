@@ -887,8 +887,9 @@ await scenario('33. Toegankelijkheid (axe-core, WCAG 2.2 AA) op alle tabs', asyn
   assert(bad.length === 0, 'axe-schendingen:\n     ' + bad.join('\n     '));
 });
 
-await scenario('34. Versie 3.0.0 zichtbaar', async () => {
-  assert((await page.getByTestId('app-version').innerText()) === 'v3.0.0', 'versie: ' + await page.getByTestId('app-version').innerText());
+await scenario('34. Versie uit package.json zichtbaar in de editor', async () => {
+  const expected = 'v' + JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+  assert((await page.getByTestId('app-version').innerText()) === expected, 'versie: ' + await page.getByTestId('app-version').innerText() + ' verwacht ' + expected);
 });
 
 await scenario('35. Migratie van v2-opslag (oude tech-instellingen) behoudt het uiterlijk', async () => {
