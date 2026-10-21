@@ -1,16 +1,8 @@
 import React from 'react';
 import { CV, MAX_FONT_PT, MIN_FONT_PT, SPACING_PRESETS, THEMES, TemplateId } from '../../shared/model';
-import { ColorField, FontPicker, NumberField, Segmented } from './fields';
+import { ColorField, FontPicker, NumberField, Segmented, Toggle } from './fields';
 
 type Upd = (fn: (cv: CV) => void) => void;
-
-const Toggle = ({ label, value, onChange, name }: { label: string; value: boolean; onChange: (v: boolean) => void; name: string }) => (
-  <label className="toggle">
-    <input type="checkbox" data-testid={name} checked={value} onChange={(e) => onChange(e.target.checked)} />
-    <span className="track"><i /></span>
-    <span>{label}</span>
-  </label>
-);
 
 const TEMPLATES: { id: TemplateId; name: string }[] = [
   { id: 'sidebar', name: 'Zijbalk' },
@@ -106,6 +98,7 @@ export function StylePanel({ cv, update, swatches, onSaveSwatch }: {
           <NumberField label="Lettergrootte" unit="pt" min={MIN_FONT_PT} max={MAX_FONT_PT} step={0.5} value={st.fontSize} name="fontsize" onChange={set('fontSize')} slider />
           <NumberField label="Regelafstand" min={1.2} max={1.8} step={0.05} value={st.lineHeight} name="lineHeight" onChange={set('lineHeight')} slider />
         </div>
+        <Toggle name="toggle-tech-colors" label="Merkkleuren bij tech-iconen" value={st.techColors} onChange={set('techColors')} />
         <div className="field">
           <span className="field-label">Koppen</span>
           <Segmented name="heading-style" value={st.headingStyle} onChange={set('headingStyle')}

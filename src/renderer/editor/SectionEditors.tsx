@@ -1,7 +1,8 @@
 import React from 'react';
 import { CV, Section, SKILL_LEVEL_NAMES, newItem, newSkillGroup, uid } from '../../shared/model';
 import { Icon } from '../icons';
-import { Btn, Field, ItemShell, ListInput, NumberField, Segmented, TextArea, TextInput, move } from './fields';
+import { Btn, Field, ItemShell, ListInput, NumberField, Segmented, TextArea, TextInput, Toggle, move } from './fields';
+import { SkillPills } from './TechEditor';
 import { PhotoEditor } from './PhotoEditor';
 
 type Upd = (fn: (cv: CV) => void) => void;
@@ -89,6 +90,12 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
     case 'projects':
       return (
         <div className="stack">
+          <div className="inline-controls">
+            <span className="field-label">Tech stack</span>
+            <Segmented name="tech-display" value={s.techDisplay} onChange={(d) => edit<typeof s>((x) => { x.techDisplay = d; })}
+              options={[{ value: 'text', label: 'Tekst' }, { value: 'chips', label: 'Chips' }]} />
+            {s.techDisplay === 'chips' && <Toggle name="tech-icons" label="Iconen" value={s.techIcons} onChange={(v) => edit<typeof s>((x) => { x.techIcons = v; })} />}
+          </div>
           {s.items.map((it, i) => (
             <ItemShell key={it.id} name={`proj-${i}`} title={it.name} index={i} count={s.items.length}
               onUp={() => edit<typeof s>((x) => { x.items = move(x.items, i, i - 1); })}
@@ -97,7 +104,9 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
               <div className="grid2">
                 <Field label="Naam"><TextInput name={`proj-${i}-name`} value={it.name} onChange={(v) => edit<typeof s>((x) => { x.items[i].name = v; })} /></Field>
                 <Field label="Periode"><TextInput value={it.period} onChange={(v) => edit<typeof s>((x) => { x.items[i].period = v; })} /></Field>
-                <Field label="Technologieën"><TextInput value={it.tech} onChange={(v) => edit<typeof s>((x) => { x.items[i].tech = v; })} /></Field>
+                <Field label="Technologieën">
+                  <ListInput suggest name={`proj-${i}-tech`} value={it.tech.split(/[,;|]/).map((t) => t.trim()).filter(Boolean)} onChange={(v) => edit<typeof s>((x) => { x.items[i].tech = v.join(', '); })} />
+                </Field>
                 <Field label="GitHub"><TextInput value={it.github} onChange={(v) => edit<typeof s>((x) => { x.items[i].github = v; })} /></Field>
               </div>
               <TextArea name={`proj-${i}-desc`} placeholder={DESC_PH} value={it.description} onChange={(v) => edit<typeof s>((x) => { x.items[i].description = v; })} />
@@ -117,10 +126,16 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
             })} options={[{ value: 'flat', label: 'Lijst' }, { value: 'grouped', label: 'Groepen' }, { value: 'levels', label: 'Niveaus' }]} />
             <Segmented name="skill-display" value={s.display} onChange={(d) => edit<typeof s>((x) => { x.display = d; })}
               options={[{ value: 'text', label: 'Tekst' }, { value: 'list', label: 'Lijst' }, { value: 'chips', label: 'Chips' }]} />
+            <Segmented name="skill-icons" value={s.icons} onChange={(m) => edit<typeof s>((x) => { x.icons = m; })}
+              options={[{ value: 'off', label: 'Zonder iconen', title: 'Alleen tekst' }, { value: 'auto', label: 'Met iconen', title: 'Bekende technologieën krijgen automatisch een icoon' }]} />
           </div>
           {s.mode === 'flat' ? (
-            <ListInput value={s.groups.flatMap((g) => g.skills)} placeholder="Vaardigheid, vaardigheid, …"
-              onChange={(v) => edit<typeof s>((x) => { if (!x.groups.length) x.groups.push(newSkillGroup()); x.groups[0].skills = v; x.groups.slice(1).forEach((g) => { g.skills = []; }); })} />
+            <>
+              <ListInput suggest name="skill-flat" value={s.groups.flatMap((g) => g.skills)} placeholder="Vaardigheid, vaardigheid, …"
+                onChange={(v) => edit<typeof s>((x) => { if (!x.groups.length) x.groups.push(newSkillGroup()); x.groups[0].skills = v; x.groups.slice(1).forEach((g) => { g.skills = []; }); })} />
+              <SkillPills skills={s.groups.flatMap((g) => g.skills)} mode={s.icons} overrides={s.iconOverrides}
+                onOverride={(k, v) => edit<typeof s>((x) => { if (v === null) delete x.iconOverrides[k]; else x.iconOverrides[k] = v; })} />
+            </>
           ) : (
             <>
               {s.groups.map((g, i) => (
@@ -136,7 +151,9 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
                       <NumberField label="Stippen" min={0} max={5} value={g.level} name={`skill-${i}-level`} onChange={(v) => edit<typeof s>((x) => { x.groups[i].level = v; })} />
                     )}
                   </div>
-                  <Field label="Vaardigheden"><ListInput value={g.skills} placeholder="a, b, c" onChange={(v) => edit<typeof s>((x) => { x.groups[i].skills = v; })} /></Field>
+                  <Field label="Vaardigheden"><ListInput suggest name={`skill-${i}-list`} value={g.skills} placeholder="a, b, c" onChange={(v) => edit<typeof s>((x) => { x.groups[i].skills = v; })} /></Field>
+                  <SkillPills skills={g.skills} mode={s.icons} overrides={s.iconOverrides}
+                    onOverride={(k, v) => edit<typeof s>((x) => { if (v === null) delete x.iconOverrides[k]; else x.iconOverrides[k] = v; })} />
                 </ItemShell>
               ))}
               <div className="btn-row">
@@ -175,6 +192,7 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
         <div className="stack">
           <Segmented name="custom-mode" value={s.mode} onChange={(m) => edit<typeof s>((x) => { x.mode = m; })}
             options={[{ value: 'text', label: 'Tekst' }, { value: 'list', label: 'Lijst' }, { value: 'keyvalue', label: 'Label + waarde' }]} />
+          {s.mode !== 'text' && <Toggle name="custom-icons" label="Iconen (GitHub, LinkedIn, tech …)" value={s.icons} onChange={(v) => edit<typeof s>((x) => { x.icons = v; })} />}
           {s.mode === 'text' ? (
             <TextArea name="custom-text" placeholder="Tekst" value={s.text} onChange={(v) => edit<typeof s>((x) => { x.text = v; })} />
           ) : (

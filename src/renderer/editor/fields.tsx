@@ -3,6 +3,7 @@ import { FONTS } from '../../shared/model';
 import { ACCENTS } from '../../shared/model';
 import { contrast, hexToHsv, hsvToHex, isHex, normalizeHex } from '../../shared/color';
 import { Icon } from '../icons';
+import { TechIcon, getTech, matchTech, suggestTech } from '../techIcons';
 
 export function Field({ label, children, wide }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return (
@@ -32,19 +33,45 @@ export function TextArea({ value, onChange, placeholder, rows = 3, name }: TProp
   );
 }
 
-/** Komma-gescheiden lijst die tijdens het typen niet "terugspringt". */
-export function ListInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
+/** Komma-gescheiden lijst die tijdens het typen niet "terugspringt"; optioneel met technologie-suggesties. */
+export function ListInput({ value, onChange, placeholder, suggest, name }: {
+  value: string[]; onChange: (v: string[]) => void; placeholder?: string; suggest?: boolean; name?: string;
+}) {
   const parse = (t: string) => t.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
   const [raw, setRaw] = useState(value.join(', '));
   useEffect(() => {
     if (parse(raw).join('|') !== value.join('|')) setRaw(value.join(', '));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+  const set = (t: string) => { setRaw(t); onChange(parse(t)); };
+  const last = raw.split(/[,\n]/).pop()?.trim() ?? '';
+  // een volledig herkende naam krijgt alleen nog een spelling-suggestie ("typescript" -> "TypeScript")
+  const exact = suggest ? getTech(matchTech(last)) : undefined;
+  const sugg = !suggest ? [] : exact ? (exact.label !== last ? [exact] : []) : suggestTech(last);
   return (
-    <input className="input" value={raw} placeholder={placeholder}
-      onChange={(e) => { setRaw(e.target.value); onChange(parse(e.target.value)); }} />
+    <div className="list-input">
+      <input className="input" data-testid={name} value={raw} placeholder={placeholder} onChange={(e) => set(e.target.value)} />
+      {sugg.length > 0 && (
+        <div className="suggest" data-testid="suggestions">
+          {sugg.map((t) => (
+            <button type="button" key={t.id} data-testid={`suggest-${t.id}`} title="Aanvullen"
+              onClick={() => { const cut = Math.max(raw.lastIndexOf(','), raw.lastIndexOf('\n')); set(`${cut >= 0 ? raw.slice(0, cut + 1) + ' ' : ''}${t.label}, `); }}>
+              <TechIcon id={t.id} />{t.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
+
+export const Toggle = ({ label, value, onChange, name }: { label: string; value: boolean; onChange: (v: boolean) => void; name: string }) => (
+  <label className="toggle">
+    <input type="checkbox" data-testid={name} checked={value} onChange={(e) => onChange(e.target.checked)} />
+    <span className="track"><i /></span>
+    <span>{label}</span>
+  </label>
+);
 
 export const Btn = ({ children, onClick, kind = 'default', title, disabled, name, small, icon }: {
   children?: React.ReactNode; onClick?: () => void; kind?: 'default' | 'primary' | 'danger' | 'ghost';

@@ -1,6 +1,7 @@
 import React from 'react';
 import { CV, Photo, Section, SkillGroup } from '../../shared/model';
 import { ContactIcon, ContactIconSvg } from '../icons';
+import { TechCtx, TechIcon, matchTech, resolveSkillIcon } from '../techIcons';
 
 /** Tekst met regeleinden; regels die met "-", "•" of "*" beginnen worden opsommingstekens. */
 export function RichText({ text, className }: { text: string; className?: string }) {
@@ -103,11 +104,37 @@ const Dots = ({ n, of = 5 }: { n: number; of?: number }) => (
   </span>
 );
 
-function SkillList({ skills, display }: { skills: string[]; display: 'text' | 'list' | 'chips' }) {
+const urlIcon = (v: string): string | null => {
+  if (/github\.com/i.test(v)) return 'github';
+  if (/gitlab\./i.test(v)) return 'gitlab';
+  if (/linkedin\.com/i.test(v)) return 'linkedin';
+  return /^https?:\/\/|^[\w-]+(\.[\w-]+)+(\/|$)/i.test(v.trim()) ? 'globe' : null;
+};
+
+/** Vaardigheden als tekst, lijst of chips; met optionele iconen (icon-first). */
+function SkillList({ skills, display, iconFor }: { skills: string[]; display: 'text' | 'list' | 'chips'; iconFor: (name: string) => string | null }) {
   if (!skills.length) return null;
-  if (display === 'chips') return <div className="chips">{skills.map((s, i) => <span className="chip" key={i}>{s}</span>)}</div>;
-  if (display === 'list') return <ul className="skill-ul">{skills.map((s, i) => <li key={i}>{s}</li>)}</ul>;
+  const icons = skills.map(iconFor);
+  const item = (sk: string, i: number) => (
+    <>{icons[i] && <TechIcon id={icons[i]!} />}<span className="tn">{sk}</span></>
+  );
+  if (display === 'chips') return <div className="chips">{skills.map((sk, i) => <span className={`chip ${icons[i] ? 'has-icon' : ''}`} key={i}>{item(sk, i)}</span>)}</div>;
+  if (display === 'list') return <ul className={`skill-ul ${icons.some(Boolean) ? 'with-icons' : ''}`}>{skills.map((sk, i) => <li key={i}>{item(sk, i)}</li>)}</ul>;
+  if (icons.some(Boolean)) return <div className="tech-inline">{skills.map((sk, i) => <span className="ti" key={i}>{item(sk, i)}</span>)}</div>;
   return <div className="skill-list">{skills.join(', ')}</div>;
+}
+
+function TechChips({ tech, icons }: { tech: string; icons: boolean }) {
+  const list = tech.split(/[,;|]/).map((t) => t.trim()).filter(Boolean);
+  if (!list.length) return null;
+  return (
+    <div className="chips tech-chips">
+      {list.map((t, i) => {
+        const id = icons ? matchTech(t) : null;
+        return <span className={`chip ${id ? 'has-icon' : ''}`} key={i}>{id && <TechIcon id={id} />}<span className="tn">{t}</span></span>;
+      })}
+    </div>
+  );
 }
 
 export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
@@ -155,16 +182,17 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
                 <div className="strong">{i.name}</div>
                 <div className="dates">{i.period}</div>
               </div>
-              {i.tech && <div className="sub tech">{i.tech}</div>}
+              {i.tech && (s.techDisplay === 'chips' ? <TechChips tech={i.tech} icons={s.techIcons} /> : <div className="sub tech">{i.tech}</div>)}
               <RichText text={i.description} />
-              {i.github && <div className="proj-link"><Link value={cleanUrl(i.github)} link={href(i.github)} /></div>}
+              {i.github && <div className="proj-link">{cv.style.icons && <ContactIconSvg name="github" />}<Link value={cleanUrl(i.github)} link={href(i.github)} /></div>}
             </div>
           ))}
         </>
       );
     case 'skills': {
+      const iconFor = (n: string) => resolveSkillIcon(n, s.icons, s.iconOverrides);
       if (s.mode === 'flat') {
-        return <SkillList skills={s.groups.flatMap((g) => g.skills)} display={s.display} />;
+        return <SkillList skills={s.groups.flatMap((g) => g.skills)} display={s.display} iconFor={iconFor} />;
       }
       const groups: SkillGroup[] = s.groups.filter((g) => g.name.trim() || g.skills.length);
       return (
@@ -177,7 +205,7 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
                   {s.mode === 'levels' && g.level > 0 && <Dots n={g.level} />}
                 </div>
               )}
-              <SkillList skills={g.skills} display={s.display} />
+              <SkillList skills={g.skills} display={s.display} iconFor={iconFor} />
             </div>
           ))}
         </>
@@ -201,6 +229,7 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
           <div className="kv-list">
             {s.items.filter((i) => i.text.trim() || i.value.trim()).map((i) => (
               <div className="kv" key={i.id}>
+                {s.icons && (() => { const id = matchTech(i.text) ?? urlIcon(i.value) ?? urlIcon(i.text); return id ? <TechIcon id={id} /> : null; })()}
                 {i.text && <span className="k">{i.text}</span>}
                 {i.value && <span className="v">{i.value}</span>}
               </div>
@@ -209,8 +238,11 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
         );
       }
       return (
-        <ul className="rich custom-list">
-          {s.items.filter((i) => i.text.trim()).map((i) => <li key={i.id}>{i.text}</li>)}
+        <ul className={`rich custom-list ${s.icons ? 'with-icons' : ''}`}>
+          {s.items.filter((i) => i.text.trim()).map((i) => {
+            const id = s.icons ? matchTech(i.text) ?? urlIcon(i.text) : null;
+            return <li key={i.id}>{id && <TechIcon id={id} />}<span className="tn">{i.text}</span></li>;
+          })}
         </ul>
       );
   }
@@ -219,9 +251,11 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
 export function SectionBlock({ s, cv, onPick }: { s: Section; cv: CV; onPick?: (id: string) => void }) {
   if (!s.visible || !hasContent(s, cv)) return null;
   return (
-    <section className={`sec sec-${s.type}`} data-sec={s.id} data-title={s.title} onClick={() => onPick?.(s.id)}>
-      <h2>{s.title}</h2>
-      <SectionBody s={s} cv={cv} />
-    </section>
+    <TechCtx.Provider value={{ brandColors: cv.style.techColors, bg: cv.template === 'sidebar' && s.zone === 'supplementary' ? cv.style.sidebarBg : '#ffffff' }}>
+      <section className={`sec sec-${s.type}`} data-sec={s.id} data-title={s.title} onClick={() => onPick?.(s.id)}>
+        <h2>{s.title}</h2>
+        <SectionBody s={s} cv={cv} />
+      </section>
+    </TechCtx.Provider>
   );
 }

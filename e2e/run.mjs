@@ -470,6 +470,89 @@ await scenario('22. Kopbalk-template: contactblok vast in de kop', async () => {
   assert(await page.getByTestId('sec-personal-zone-supplementary').count() === 0, 'zone-knoppen bij vastgepind contact');
 });
 
+
+await scenario('23. Tech-iconen: automatisch, per skill, suggesties, chips, projecten, links, merkkleuren, PDF', async () => {
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-header').click();
+  await page.getByTestId('tab-sections').click();
+  const tech = (id) => page.locator(`.cv-page svg[data-tech="${id}"]`).count();
+  const sk = await open(page, 'skills');
+  await sk.getByTestId('skill-mode-grouped').click();
+  await sk.getByTestId('skill-display-text').click();
+  await sk.getByTestId('skill-icons-auto').click();
+  for (const id of ['typescript', 'database', 'java', 'react', 'nodejs', 'api', 'git', 'github', 'docker', 'godot']) {
+    assert(await tech(id) >= 1, `icoon ${id} ontbreekt in preview`);
+  }
+  assert(await tech('python') === 1, 'python ontbreekt');
+  await page.screenshot({ path: path.join(out, 'tech-iconen-tekst.png') });
+  // uit = alleen tekst
+  await sk.getByTestId('skill-icons-off').click();
+  assert(await page.locator('.cv-page .sec-skills svg.tic').count() === 0, 'iconen blijven staan bij "zonder iconen"');
+  assert((await page.locator('.cv-page .sec-skills').innerText()).includes('TypeScript, Python'), 'tekstweergave veranderd');
+  await sk.getByTestId('skill-icons-auto').click();
+  // per skill: Python -> geen icoon, Git -> terminal
+  await sk.getByTestId('skill-0').locator('.item-head').click().catch(() => {});
+  await page.getByTestId('skill-pill-python').first().click();
+  await page.getByTestId('icon-pick-none').click();
+  assert(await tech('python') === 0, 'python-icoon niet verwijderd');
+  await sk.getByTestId('skill-2').locator('.item-head').click();
+  await page.getByTestId('skill-pill-git').first().click();
+  await page.getByTestId('icon-search').fill('termi');
+  await page.getByTestId('icon-pick-terminal').click();
+  assert(await page.locator('.cv-page .sec-skills svg[data-tech="terminal"]').count() === 1, 'terminal-icoon niet gekozen');
+  await page.getByTestId('skill-pill-git').first().click();
+  await page.getByTestId('icon-pick-auto').click();
+  assert(await page.locator('.cv-page .sec-skills svg[data-tech="git"]').count() >= 1, 'automatisch niet hersteld');
+  // suggesties
+  const list = sk.getByTestId('skill-0-list');
+  await list.fill('TypeSc');
+  await page.getByTestId('suggest-typescript').click();
+  assert((await list.inputValue()).startsWith('TypeScript'), 'suggestie niet toegepast: ' + await list.inputValue());
+  await list.fill('TypeScript, Python, SQL, Java');
+  const pillTexts = await sk.getByTestId('skill-0').locator('.pill').allInnerTexts();
+  assert(pillTexts.join('|') === 'TypeScript|Python|SQL|Java', 'pills: ' + pillTexts.join('|'));
+  // icon-first chips
+  await sk.getByTestId('skill-display-chips').click();
+  assert(await page.locator('.cv-page .sec-skills .chip.has-icon svg').count() >= 6, 'chips met icoon ontbreken');
+  await page.screenshot({ path: path.join(out, 'tech-iconen-chips.png') });
+  // projecten: tech-stack chips
+  const pr = await open(page, 'projects');
+  await pr.getByTestId('tech-display-chips').click();
+  assert(await page.locator('.cv-page .sec-projects .tech-chips .chip.has-icon').count() >= 3, 'tech-chips in project ontbreken');
+  await pr.locator('label.toggle', { hasText: 'Iconen' }).click();
+  assert(await page.locator('.cv-page .sec-projects .tech-chips svg').count() === 0, 'project-iconen blijven bij uitzetten');
+  await pr.locator('label.toggle', { hasText: 'Iconen' }).click();
+  // links met GitHub/LinkedIn-iconen
+  await page.getByTestId('add-section').click();
+  await page.getByTestId('add-links').click();
+  const links = page.locator('[data-testid="sec-custom"]').last();
+  await links.getByTestId('custom-add').click();
+  await links.getByTestId('custom-0-text').fill('GitHub');
+  await links.locator('input[placeholder="Waarde"]').first().fill('github.com/voorbeeld');
+  assert(await page.locator('.cv-page .sec-custom svg[data-tech="github"]').count() === 1, 'github-icoon bij link ontbreekt');
+  // merkkleuren (header-template: lichte achtergrond -> merkkleur toegepast)
+  await page.getByTestId('tab-style').click();
+  assert(await page.locator('.cv-page .sec-skills svg[data-tech="typescript"]').first().evaluate((e) => getComputedStyle(e).color) !== 'rgb(51, 120, 198)', 'merkkleur staat standaard aan');
+  await page.locator('label.toggle', { hasText: 'Merkkleuren' }).click();
+  const c = await page.locator('.cv-page .sec-skills svg[data-tech="typescript"]').first().evaluate((e) => getComputedStyle(e).color);
+  assert(c === 'rgb(49, 120, 198)', 'merkkleur niet toegepast: ' + c);
+  await page.getByTestId('tab-sections').click();
+  assert(!(await page.getByTestId('export-pdf').isDisabled()), 'export geblokkeerd door tech-iconen');
+  await page.getByTestId('export-pdf').click();
+  await page.waitForFunction(() => /1 pagina/.test(document.querySelector('[data-testid="toast"]')?.textContent || ''));
+  const bytes = fs.readFileSync(path.join(out, 'Voorbeeld Persoon.pdf'));
+  const doc = await PDFDocument.load(bytes);
+  assert(doc.getPageCount() === 1, 'tech-cv niet 1 pagina');
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true }).promise;
+  const text = (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(' ');
+  for (const n of ['TypeScript', 'Docker', 'Godot', 'github.com/voorbeeld']) assert(text.includes(n), `tekst ontbreekt in PDF: ${n}`);
+  const ops = await (await pdf.getPage(1)).getOperatorList();
+  const imgs = ops.fnArray.filter((f) => f === pdfjs.OPS.paintImageXObject || f === pdfjs.OPS.paintInlineImageXObject).length;
+  assert(imgs <= 1, `iconen als bitmap in PDF (${imgs} afbeeldingen; alleen de profielfoto mag een bitmap zijn)`);
+  fs.copyFileSync(path.join(out, 'Voorbeeld Persoon.pdf'), path.join(out, 'tech-export.pdf'));
+});
+
 await app.close();
 fs.rmSync(userData, { recursive: true, force: true });
 const failed = results.filter((r) => !r[0]);

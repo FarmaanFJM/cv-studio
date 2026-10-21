@@ -70,7 +70,7 @@
 .cv-page .skill-name { font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 3mm; }
 .cv-page .skill-ul { padding-left: 4mm; }
 .cv-page .chips { display: flex; flex-wrap: wrap; gap: 1mm; margin-top: 0.6mm; }
-.cv-page .chip { padding: 0.25mm 2.2mm; border-radius: 3mm; background: color-mix(in srgb, var(--heading) 12%, #fff); font-size: 0.94em; }
+.cv-page .chip { padding: 0.25mm 2.2mm; border-radius: 3mm; background: color-mix(in srgb, var(--heading) 13%, #fff); border: 0.2mm solid color-mix(in srgb, var(--heading) 28%, #fff); font-size: 0.94em; }
 .cv-page .dots { display: inline-flex; gap: 0.9mm; flex: none; }
 .cv-page .dot { display: block; width: 1.9mm; height: 1.9mm; border-radius: 50%; background: currentColor; opacity: 0.28; }
 .cv-page .dot.on { opacity: 1; }
@@ -101,7 +101,7 @@
 .t-sidebar .side .sec h2, .t-header .band h2 { color: var(--side-fg); }
 .t-sidebar.hs-caps .side .sec h2 { border-bottom-color: color-mix(in srgb, var(--side-fg) 45%, transparent); }
 .t-sidebar.hs-title .side .sec h2::after { background: color-mix(in srgb, var(--side-fg) 55%, transparent); }
-.t-sidebar .side .chip { background: color-mix(in srgb, var(--side-fg) 18%, transparent); }
+.t-sidebar .side .chip { background: color-mix(in srgb, var(--side-fg) 18%, transparent); border-color: color-mix(in srgb, var(--side-fg) 35%, transparent); }
 .t-sidebar .side .sub, .t-sidebar .side .dates, .t-sidebar .side .proj-link, .t-sidebar .side .sub.tech { color: color-mix(in srgb, var(--side-fg) 85%, transparent); }
 
 /* ----- Header-sjabloon: brede kopbalk ----- */
@@ -138,3 +138,18 @@
 .t-minimal .skill-name, .t-minimal .skill-list { display: inline; }
 .t-minimal .skill-name::after { content: ': '; font-weight: 700; }
 .t-minimal .skill-name .dots { margin-left: 1.5mm; }
+
+/* ----- technologie-iconen ----- */
+.cv-page .tic { width: 1.12em; height: 1.12em; flex: none; display: inline-block; vertical-align: -0.2em; }
+.cv-page .tech-inline { display: flex; flex-wrap: wrap; gap: 0.8mm 3.4mm; }
+.cv-page .tech-inline .ti, .cv-page .skill-ul.with-icons li, .cv-page .custom-list.with-icons li { display: inline-flex; align-items: center; gap: 1.3mm; }
+.cv-page .skill-ul.with-icons, .cv-page .custom-list.with-icons { list-style: none; padding-left: 0; }
+.cv-page .skill-ul.with-icons li, .cv-page .custom-list.with-icons li { display: flex; margin-top: 0.6mm; }
+.cv-page .kv { align-items: center; }
+.cv-page .kv .tic { margin-right: -1.4mm; }
+.cv-page .chip { display: inline-flex; align-items: center; gap: 1.2mm; }
+.cv-page .chip.has-icon { padding-left: 1.5mm; }
+.cv-page .chip .tic { width: 1.2em; height: 1.2em; vertical-align: 0; }
+.cv-page .tech-chips { margin-top: 0.8mm; }
+.cv-page .proj-link { display: flex; align-items: center; gap: 1.3mm; }
+.cv-page .proj-link .ic { width: 1em; height: 1em; margin-top: 0; }
