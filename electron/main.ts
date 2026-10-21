@@ -101,6 +101,7 @@ async function renderPdf(cv: CV): Promise<Buffer> {
 }
 
 function registerIpc() {
+  ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('store:load', () => store.load());
   ipcMain.handle('store:save', (_e, state) => {
     try { store.save(state); return { ok: true }; } catch (e) { return fail(e); }

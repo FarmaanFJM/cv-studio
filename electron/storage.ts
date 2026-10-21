@@ -25,7 +25,7 @@ export class CvStore {
 
   private fresh(): AppState {
     const cv = createEmptyCv();
-    return { version: 3, activeId: cv.id, cvs: [cv], swatches: [] };
+    return { version: 4, activeId: cv.id, cvs: [cv], swatches: [] };
   }
 
   save(state: unknown): void {

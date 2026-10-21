@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('cvApi', {
   importJson: () => ipcRenderer.invoke('json:import'),
   exportPdf: (cv: unknown) => ipcRenderer.invoke('pdf:export', cv),
   getPrintCv: () => ipcRenderer.invoke('print:get-cv'),
+  getVersion: () => ipcRenderer.invoke('app:version'),
   isPrintMode: location.search.includes('print=1')
 });

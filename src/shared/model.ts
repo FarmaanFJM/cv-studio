@@ -10,12 +10,17 @@ export type Zone = 'primary' | 'supplementary';
 export type PlaceTarget = Zone | 'hidden';
 export type PhotoShape = 'round' | 'square';
 export type SkillMode = 'flat' | 'grouped' | 'levels';
-export type ListDisplay = 'text' | 'list' | 'chips';
-export type TechIconMode = 'off' | 'auto';
-export type TechDisplay = 'text' | 'chips';
+/** Presentatie van vaardigheden: 'text' = alleen tekst (nooit iconen), 'inline' = icoon + label, 'list' = lijst, 'chips' = chips met icoon. */
+export type SkillDisplay = 'text' | 'inline' | 'list' | 'chips';
+/** Presentatie van de tech stack in projecten. */
+export type TechDisplay = 'text' | 'inline' | 'chips';
 /** Kleur van technologie-iconen: automatisch (op basis van plaatsing/achtergrond), originele merkkleuren of monochroom. */
 export type TechColorMode = 'auto' | 'brand' | 'mono';
-export type TechColorSetting = 'inherit' | TechColorMode;
+/**
+ * Tech-icoon-instellingen van een onderdeel. Zonder eigen instelling (techOverride = false) volgt het onderdeel de
+ * globale stijl; de eigen waarden blijven bewaard zodat terugschakelen niets kwijtraakt.
+ */
+export interface TechSettings { techOverride: boolean; techShow: boolean; techColor: TechColorMode }
 export type LangDisplay = 'text' | 'dots';
 export type HeadingStyle = 'caps' | 'title' | 'plain';
 export type ItemLayout = 'inline' | 'dates-left';
@@ -60,10 +65,10 @@ export type Section =
   | (SectionBase & { type: 'profile'; text: string })
   | (SectionBase & { type: 'experience'; items: ExperienceItem[] })
   | (SectionBase & { type: 'education'; items: EducationItem[] })
-  | (SectionBase & { type: 'projects'; techDisplay: TechDisplay; techIcons: boolean; techColor: TechColorSetting; items: ProjectItem[] })
-  | (SectionBase & { type: 'skills'; mode: SkillMode; display: ListDisplay; icons: TechIconMode; techColor: TechColorSetting; iconOverrides: Record<string, string>; groups: SkillGroup[] })
+  | (SectionBase & TechSettings & { type: 'projects'; techDisplay: TechDisplay; items: ProjectItem[] })
+  | (SectionBase & TechSettings & { type: 'skills'; mode: SkillMode; display: SkillDisplay; iconOverrides: Record<string, string>; groups: SkillGroup[] })
   | (SectionBase & { type: 'languages'; display: LangDisplay; items: LanguageItem[] })
-  | (SectionBase & { type: 'custom'; mode: 'text' | 'list' | 'keyvalue'; icons: boolean; techColor: TechColorSetting; text: string; items: CustomItem[] });
+  | (SectionBase & TechSettings & { type: 'custom'; mode: 'text' | 'list' | 'keyvalue'; text: string; items: CustomItem[] });
 
 export interface StyleSettings {
   accent: string;
@@ -83,6 +88,7 @@ export interface StyleSettings {
   itemLayout: ItemLayout;
   icons: boolean;
   nameInSidebar: boolean;
+  techIcons: boolean; // globaal: toon technologie-iconen (los van contacticonen)
   techColorMode: TechColorMode;
 }
 
@@ -99,7 +105,7 @@ export interface CV {
 }
 
 export interface AppState {
-  version: 3;
+  version: 4;
   activeId: string;
   cvs: CV[];
   swatches: string[]; // eigen opgeslagen kleuren
@@ -170,7 +176,7 @@ export const emptyPersonal = (): Personal => ({
 export const defaultStyle = (): StyleSettings => ({
   accent: '#1f4e79', sidebarBg: '#1f4e79', headingColor: '', textColor: '', dividerColor: '',
   font: 'inter', fontSize: 9.5, lineHeight: 1.4, sectionGap: 5.6, itemGap: 2.4, margin: 13, sidebarWidth: 70, photoSize: 40,
-  headingStyle: 'caps', itemLayout: 'inline', icons: true, nameInSidebar: false, techColorMode: 'auto'
+  headingStyle: 'caps', itemLayout: 'inline', icons: true, nameInSidebar: false, techIcons: true, techColorMode: 'auto'
 });
 
 export function newItem(type: 'experience'): ExperienceItem;
@@ -190,8 +196,9 @@ export function newItem(type: string): unknown {
 export function newSkillGroup(name = '', level = 0): SkillGroup { return { id: uid(), name, skills: [], level }; }
 
 export interface SectionPreset { key: string; label: string; zone: Zone; make: () => Section }
-const custom = (title: string, zone: Zone, mode: 'text' | 'list' | 'keyvalue', icons = false): Section =>
-  ({ id: uid(), type: 'custom', title, visible: true, zone, mode, icons, techColor: 'inherit', text: '', items: [] });
+const TECH_DEFAULT: TechSettings = { techOverride: false, techShow: true, techColor: 'auto' };
+const custom = (title: string, zone: Zone, mode: 'text' | 'list' | 'keyvalue'): Section =>
+  ({ id: uid(), type: 'custom', title, visible: true, zone, mode, ...TECH_DEFAULT, text: '', items: [] });
 
 export function newCustomSection(): Section { return custom('Nieuw onderdeel', 'primary', 'text'); }
 
@@ -199,8 +206,8 @@ export function newCustomSection(): Section { return custom('Nieuw onderdeel', '
 export const SECTION_PRESETS: SectionPreset[] = [
   { key: 'interests', label: 'Interesses', zone: 'supplementary', make: () => custom('Interesses', 'supplementary', 'list') },
   { key: 'certs', label: 'Certificaten', zone: 'supplementary', make: () => custom('Certificaten', 'supplementary', 'list') },
-  { key: 'links', label: 'Links', zone: 'supplementary', make: () => custom('Links', 'supplementary', 'keyvalue', true) },
-  { key: 'tech', label: 'Technologieën & tools', zone: 'supplementary', make: () => ({ id: uid(), type: 'skills', title: 'Technologieën', visible: true, zone: 'supplementary', mode: 'flat', display: 'chips', icons: 'auto', techColor: 'inherit', iconOverrides: {}, groups: [newSkillGroup()] }) },
+  { key: 'links', label: 'Links', zone: 'supplementary', make: () => custom('Links', 'supplementary', 'keyvalue') },
+  { key: 'tech', label: 'Technologieën & tools', zone: 'supplementary', make: () => ({ id: uid(), type: 'skills', title: 'Technologieën', visible: true, zone: 'supplementary', mode: 'flat', display: 'chips', ...TECH_DEFAULT, iconOverrides: {}, groups: [newSkillGroup()] }) },
   { key: 'about', label: 'Over mij', zone: 'supplementary', make: () => custom('Over mij', 'supplementary', 'text') },
   { key: 'extra', label: 'Extra informatie', zone: 'supplementary', make: () => custom('Extra informatie', 'supplementary', 'text') },
   { key: 'stats', label: 'Gegevens / maten', zone: 'supplementary', make: () => custom('Gegevens', 'supplementary', 'keyvalue') },
@@ -214,8 +221,8 @@ export function emptySection(type: SectionType): Section {
     case 'profile': return { ...base, type, text: '' };
     case 'experience': return { ...base, type, items: [] };
     case 'education': return { ...base, type, items: [] };
-    case 'projects': return { ...base, type, techDisplay: 'text', techIcons: true, techColor: 'inherit', items: [] };
-    case 'skills': return { ...base, type, mode: 'grouped', display: 'text', icons: 'off', techColor: 'inherit', iconOverrides: {}, groups: [] };
+    case 'projects': return { ...base, type, techDisplay: 'text', ...TECH_DEFAULT, items: [] };
+    case 'skills': return { ...base, type, mode: 'grouped', display: 'text', ...TECH_DEFAULT, iconOverrides: {}, groups: [] };
     case 'languages': return { ...base, type, display: 'text', items: [] };
     default: return newCustomSection();
   }
@@ -315,7 +322,21 @@ function normalizeZone(v: unknown, d: Zone): Zone {
   return d;
 }
 
-const techColorSetting = (v: unknown): TechColorSetting => oneOf(v, ['inherit', 'auto', 'brand', 'mono'] as const, 'inherit');
+const TECH_MODES = ['auto', 'brand', 'mono'] as const;
+/**
+ * Leest de tech-instellingen van een onderdeel. Oudere cv's (v2) hadden per onderdeel 'icons' (aan/uit) en een
+ * 'techColor' die 'inherit' kon zijn; die worden zo omgezet dat het cv er hetzelfde uitziet:
+ * - icoontjes eerder uit  -> eigen instelling met 'Toon iconen' uit
+ * - eigen kleur gekozen  -> eigen instelling met die kleur
+ * - anders               -> volgt de globale stijl
+ */
+function sanitizeTech(raw: Record<string, unknown>, legacyShow: boolean): TechSettings {
+  if (typeof raw.techOverride === 'boolean') {
+    return { techOverride: raw.techOverride, techShow: bool(raw.techShow, true), techColor: oneOf(raw.techColor, TECH_MODES, 'auto') };
+  }
+  const colorChosen = TECH_MODES.includes(raw.techColor as never);
+  return { techOverride: colorChosen || !legacyShow, techShow: legacyShow, techColor: oneOf(raw.techColor, TECH_MODES, 'auto') };
+}
 const ICON_ID = /^[a-z0-9-]{1,40}$/;
 /** Per-vaardigheid icoon-keuzes: sleutel = genormaliseerde naam, waarde = icoon-id of 'none'. */
 function sanitizeOverrides(v: unknown): Record<string, string> {
@@ -351,15 +372,16 @@ function sanitizeSection(raw: unknown): Section | null {
         id: id(i.id), degree: str(i.degree, 300), school: str(i.school, 300),
         start: str(i.start, 60), end: str(i.end, 60), description: str(i.description) })) };
     case 'projects':
-      return { ...base, type: 'projects', techDisplay: oneOf(raw.techDisplay, ['text', 'chips'] as const, 'text'), techIcons: bool(raw.techIcons, true), techColor: techColorSetting(raw.techColor), items: arr(raw.items).filter(isObj).map((i) => ({
+      // v2: 'chips' was de compacte icoon+naam-weergave, die nu 'inline' heet
+      return { ...base, type: 'projects', ...sanitizeTech(raw, !(raw.techDisplay === 'chips' && raw.techIcons === false)),
+        techDisplay: raw.techDisplay === 'chips' && typeof raw.techOverride !== 'boolean' ? 'inline' : oneOf(raw.techDisplay, ['text', 'inline', 'chips'] as const, 'text'), items: arr(raw.items).filter(isObj).map((i) => ({
         id: id(i.id), name: str(i.name, 300), tech: str(i.tech, 500), period: str(i.period, 60),
         description: str(i.description), github: str(i.github, 500) })) };
     case 'skills':
       return { ...base, type: 'skills',
         mode: oneOf(raw.mode, ['flat', 'grouped', 'levels'] as const, 'grouped'),
-        display: oneOf(raw.display, ['text', 'list', 'chips'] as const, 'text'),
-        icons: oneOf(raw.icons, ['off', 'auto'] as const, 'off'),
-        techColor: techColorSetting(raw.techColor),
+        ...sanitizeTech(raw, raw.icons === 'auto'),
+        display: raw.display === 'text' && raw.icons === 'auto' && typeof raw.techOverride !== 'boolean' ? 'inline' : oneOf(raw.display, ['text', 'inline', 'list', 'chips'] as const, 'text'),
         iconOverrides: sanitizeOverrides(raw.iconOverrides),
         groups: arr(raw.groups).filter(isObj).map((g) => ({
           id: id(g.id), name: str(g.name, 200), level: Math.round(num(g.level, 0, 0, 5)),
@@ -369,7 +391,7 @@ function sanitizeSection(raw: unknown): Section | null {
         items: arr(raw.items).filter(isObj).map((i) => ({
           id: id(i.id), name: str(i.name, 200), level: str(i.level, 200), rating: Math.round(num(i.rating, 0, 0, 5)) })) };
     case 'custom':
-      return { ...base, type: 'custom', mode: oneOf(raw.mode, ['text', 'list', 'keyvalue'] as const, 'text'), icons: bool(raw.icons, false), techColor: techColorSetting(raw.techColor), text: str(raw.text),
+      return { ...base, type: 'custom', mode: oneOf(raw.mode, ['text', 'list', 'keyvalue'] as const, 'text'), ...sanitizeTech(raw, raw.icons === true), text: str(raw.text),
         items: arr(raw.items).filter(isObj).map((i) => ({ id: id(i.id), text: str(i.text, 2000), value: str(i.value, 2000) })) };
   }
 }
@@ -399,6 +421,7 @@ function sanitizeStyle(raw: unknown): StyleSettings {
     headingStyle: oneOf(s.headingStyle, ['caps', 'title', 'plain'] as const, d.headingStyle),
     itemLayout: oneOf(s.itemLayout, ['inline', 'dates-left'] as const, d.itemLayout),
     icons: bool(s.icons, d.icons),
+    techIcons: bool(s.techIcons, d.techIcons),
     nameInSidebar: bool(s.nameInSidebar, d.nameInSidebar),
     // v2.0-migratie: de oude schakelaar 'techColors' (merkkleur aan) wordt 'brand'; anders geldt het nieuwe automatische gedrag
     techColorMode: oneOf(s.techColorMode, ['auto', 'brand', 'mono'] as const, s.techColors === true ? 'brand' : d.techColorMode)
@@ -447,7 +470,7 @@ export function sanitizeState(raw: unknown): AppState {
   for (const c of cvs) { while (ids.has(c.id)) c.id = uid(); ids.add(c.id); }
   const activeId = isObj(raw) && typeof raw.activeId === 'string' && ids.has(raw.activeId) ? raw.activeId : cvs[0].id;
   const swatches = isObj(raw) && Array.isArray(raw.swatches) ? raw.swatches.filter(isHex).map((c) => c.toLowerCase()).slice(0, 24) : [];
-  return { version: 3, activeId, cvs, swatches };
+  return { version: 4, activeId, cvs, swatches };
 }
 
 /** Kopie met nieuwe id's, zodat het origineel nooit wordt overschreven. */

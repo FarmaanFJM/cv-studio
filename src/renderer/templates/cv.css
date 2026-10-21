@@ -77,7 +77,8 @@
 .cv-page .lang { margin-top: 0.8mm; display: flex; justify-content: space-between; align-items: center; gap: 3mm; }
 .cv-page .lang:first-child { margin-top: 0; }
 .cv-page .lang .level { opacity: 0.85; }
-.cv-page .kv { display: flex; gap: 3mm; margin-top: 0.8mm; }
+.cv-page .kv { display: flex; flex-wrap: wrap; gap: 0 3mm; margin-top: 0.8mm; }
+.cv-page .kv .k { white-space: nowrap; }
 .cv-page .kv:first-child { margin-top: 0; }
 .cv-page .kv .k { font-weight: 700; }
 .cv-page .kv .v:only-child { font-weight: 400; }
@@ -150,9 +151,10 @@
 .cv-page .chip { display: inline-flex; align-items: center; gap: 1.2mm; }
 .cv-page .chip.has-icon { padding-left: 1.5mm; }
 .cv-page .chip .tic { vertical-align: 0; }
-.cv-page .tech-chips { margin-top: 0.8mm; gap: 0.6mm 3.2mm; }
+.cv-page .tech-chips { margin-top: 0.8mm; }
+.cv-page .tech-chips.plain { gap: 0.6mm 3.2mm; }
 /* tech stack in projecten: compacte icoon+naam, zonder vlak of rand; de naam houdt de gewone tekstkleur */
-.cv-page .tech-chips .chip { background: none; border: 0; padding: 0; border-radius: 0; font-size: 0.94em; gap: 1.1mm; }
-.cv-page .tech-chips .chip.has-icon { padding-left: 0; }
+.cv-page .tech-chips.plain .chip { background: none; border: 0; padding: 0; border-radius: 0; font-size: 0.94em; gap: 1.1mm; }
+.cv-page .tech-chips.plain .chip.has-icon { padding-left: 0; }
 .cv-page .proj-link { display: flex; align-items: center; gap: 1.3mm; }
 .cv-page .proj-link .ic { width: 1em; height: 1em; margin-top: 0; }

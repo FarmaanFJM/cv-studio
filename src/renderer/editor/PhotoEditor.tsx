@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { CV, Photo } from '../../shared/model';
 import { PhotoView } from '../templates/blocks';
-import { Btn } from './fields';
+import { SummaButton, SummaFieldset } from '../ui';
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -81,6 +81,16 @@ export function PhotoEditor({ cv, update }: { cv: CV; update: (fn: (cv: CV) => v
         <div className="crop-row" onDragOver={(e) => e.preventDefault()} onDrop={drop}>
           <div
             className={`crop-view ${photo.shape}`} style={{ width: VIEW, height: VIEW }} data-testid="crop-view"
+            tabIndex={0} role="application" aria-label="Foto positioneren: sleep of gebruik de pijltjestoetsen"
+            onKeyDown={(e) => {
+              const d = e.shiftKey ? 0.1 : 0.02;
+              const dx = e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0;
+              const dy = e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0;
+              if (!dx && !dy) return;
+              e.preventDefault();
+              const { mx, my } = limits(photo);
+              update((c) => { if (c.photo) { c.photo.offsetX = clamp(c.photo.offsetX + dx, mx); c.photo.offsetY = clamp(c.photo.offsetY + dy, my); } });
+            }}
             onPointerDown={(e) => {
               (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
               drag.current = { x: e.clientX, y: e.clientY, ox: photo.offsetX, oy: photo.offsetY };
@@ -111,19 +121,9 @@ export function PhotoEditor({ cv, update }: { cv: CV; update: (fn: (cv: CV) => v
                   });
                 }} />
             </label>
-            <div className="seg">
-              <button type="button" className={photo.shape === 'round' ? 'on' : ''} data-testid="shape-round"
-                onClick={() => update((c) => { if (c.photo) c.photo.shape = 'round'; })}>Rond</button>
-              <button type="button" className={photo.shape === 'square' ? 'on' : ''} data-testid="shape-square"
-                onClick={() => update((c) => { if (c.photo) c.photo.shape = 'square'; })}>Vierkant</button>
-            </div>
-            <label className="check">
-              <input type="checkbox" checked={photo.visible} data-testid="photo-visible"
-                onChange={(e) => update((c) => { if (c.photo) c.photo.visible = e.target.checked; })} /> Foto tonen
-            </label>
             <div className="btn-row">
-              <Btn small onClick={() => input.current?.click()}>Andere foto</Btn>
-              <Btn small kind="danger" name="photo-remove" onClick={() => update((c) => { c.photo = null; })}>Verwijderen</Btn>
+              <SummaButton small onClick={() => input.current?.click()}>Andere foto</SummaButton>
+              <SummaButton small kind="danger" name="photo-remove" onClick={() => update((c) => { c.photo = null; })}>Verwijderen</SummaButton>
             </div>
           </div>
         </div>

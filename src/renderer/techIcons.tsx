@@ -327,10 +327,14 @@ export function TechIcon({ id }: { id: string }) {
   );
 }
 
-/** Welk icoon hoort bij een vaardigheid? Override (id of 'none') wint van automatisch herkennen. */
-export function resolveSkillIcon(name: string, mode: 'off' | 'auto', overrides: Record<string, string>): string | null {
+/**
+ * Welk icoon hoort bij een vaardigheid? Alleen als iconen zichtbaar zijn (zie effectiveTech: globaal en per onderdeel);
+ * daarna wint de keuze per vaardigheid ('none' of een icoon-id) van automatisch herkennen.
+ */
+export function resolveSkillIcon(name: string, show: boolean, overrides: Record<string, string>): string | null {
+  if (!show) return null;
   const o = overrides[compact(name)];
   if (o === 'none') return null;
   if (o && getTech(o)) return o;
-  return mode === 'auto' ? matchTech(name) : null;
+  return matchTech(name);
 }

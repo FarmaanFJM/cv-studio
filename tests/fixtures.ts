@@ -16,7 +16,7 @@ export function demoCv(): CV {
     if (s.type === 'education') s.items = [{ id: uid(), degree: 'Testopleiding Informatica', school: 'Testhogeschool', start: '2022', end: 'heden', description: '' }];
     if (s.type === 'experience') s.items = [{ id: uid(), role: 'Testfunctie', company: 'Testbedrijf', location: 'Utrecht', start: '2021', end: '2022', description: '- Testtaak één\n- Testtaak twee' }];
     if (s.type === 'skills') {
-      s.icons = 'auto';
+      s.display = 'inline';
       s.groups = [
         { id: uid(), name: 'Programmeren', skills: ['TypeScript', 'Python', 'SQL', 'Java'], level: 0 },
         { id: uid(), name: 'Web', skills: ['React', 'Node.js', 'REST API'], level: 0 },

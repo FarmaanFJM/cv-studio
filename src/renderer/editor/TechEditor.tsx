@@ -43,16 +43,18 @@ function IconPicker({ current, onPick, onClose }: { current: string | null; onPi
 }
 
 /** Per vaardigheid: toont het gekozen/herkende icoon en laat je het wijzigen of uitzetten. */
-export function SkillPills({ skills, mode, overrides, onOverride }: {
-  skills: string[]; mode: 'off' | 'auto'; overrides: Record<string, string>; onOverride: (key: string, value: string | null) => void;
+export function SkillPills({ skills, show, overrides, onOverride }: {
+  skills: string[]; show: boolean; overrides: Record<string, string>; onOverride: (key: string, value: string | null) => void;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   if (!skills.length) return null;
+  // iconen uit (globaal, voor dit onderdeel of door de weergave 'Tekst'): keuzes per vaardigheid blijven bewaard maar gelden niet
+  if (!show) return <p className="field-hint" data-testid="pills-off">Iconen zijn uitgezet; keuzes per vaardigheid blijven bewaard.</p>;
   return (
     <div className="pills" data-testid="skill-pills">
       {skills.map((sk) => {
         const key = compact(sk);
-        const icon = resolveSkillIcon(sk, mode, overrides);
+        const icon = resolveSkillIcon(sk, show, overrides);
         return (
           <div className="pill-wrap" key={sk}>
             <button type="button" className={`pill ${icon ? 'has-icon' : ''} ${overrides[key] ? 'custom' : ''}`} data-testid={`skill-pill-${key}`}

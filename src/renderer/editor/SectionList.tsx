@@ -4,7 +4,7 @@ import {
 } from '../../shared/model';
 import { Icon } from '../icons';
 import { FitReport } from '../layout';
-import { Btn, Field, TextInput } from './fields';
+import { SummaButton, SummaField, SummaMenu, SummaSectionCard, SummaTextInput, SummaToggle } from '../ui';
 import { SectionEditor } from './SectionEditors';
 
 interface Props {
@@ -24,26 +24,28 @@ function AddMenu({ cv, onAdd }: { cv: CV; onAdd: (s: Section) => void }) {
   useEffect(() => {
     if (!open) return;
     const f = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', f);
-    return () => document.removeEventListener('mousedown', f);
+    document.addEventListener('keydown', k);
+    return () => { document.removeEventListener('mousedown', f); document.removeEventListener('keydown', k); };
   }, [open]);
   const missing = STANDARD.filter((t) => !cv.sections.some((s) => s.type === t));
   const pick = (s: Section) => { onAdd(s); setOpen(false); };
   return (
     <div className="add-menu" ref={root}>
-      <Btn name="add-section" onClick={() => setOpen((o) => !o)}><Icon name="plus" size={14} /> Onderdeel</Btn>
+      <SummaButton name="add-section" expanded={open} haspopup onClick={() => setOpen((o) => !o)}><Icon name="plus" size={14} /> Onderdeel toevoegen</SummaButton>
       {open && (
-        <div className="popover add-pop">
+        <div className="popover add-pop" role="menu" aria-label="Onderdeel toevoegen">
           <div className="pop-title">Aanvullende inhoud</div>
           {SECTION_PRESETS.filter((p) => p.zone === 'supplementary').map((p) => (
-            <button type="button" key={p.key} data-testid={`add-${p.key}`} onClick={() => pick(p.make())}>{p.label}</button>
+            <button type="button" role="menuitem" key={p.key} data-testid={`add-${p.key}`} onClick={() => pick(p.make())}>{p.label}</button>
           ))}
           <div className="pop-title">Hoofdinhoud</div>
           {SECTION_PRESETS.filter((p) => p.zone === 'primary').map((p) => (
-            <button type="button" key={p.key} data-testid={`add-${p.key}`} onClick={() => pick(p.make())}>{p.label}</button>
+            <button type="button" role="menuitem" key={p.key} data-testid={`add-${p.key}`} onClick={() => pick(p.make())}>{p.label}</button>
           ))}
           {missing.map((t) => (
-            <button type="button" key={t} data-testid={`add-std-${t}`} onClick={() => pick(emptySection(t))}>{SECTION_TITLES[t]}</button>
+            <button type="button" role="menuitem" key={t} data-testid={`add-std-${t}`} onClick={() => pick(emptySection(t))}>{SECTION_TITLES[t]}</button>
           ))}
         </div>
       )}
@@ -54,12 +56,19 @@ function AddMenu({ cv, onAdd }: { cv: CV; onAdd: (s: Section) => void }) {
 export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
+  const [focusHandle, setFocusHandle] = useState<string | null>(null);
   const single = cv.template === 'minimal';
   // in het kopbalk-sjabloon heeft het contactblok een vaste plek (geen zone)
   const pinned = cv.template === 'header' ? cv.sections.find((s) => s.type === 'personal' && s.visible) : undefined;
-  const groups: { key: PlaceTarget; label: string }[] = single
+  const groups: { key: PlaceTarget; label: string; hint?: string }[] = single
     ? [{ key: 'primary', label: 'Volgorde' }, { key: 'hidden', label: 'Verborgen' }]
     : [{ key: 'primary', label: 'Hoofdinhoud' }, { key: 'supplementary', label: 'Aanvullende inhoud' }, { key: 'hidden', label: 'Verborgen' }];
+
+  useEffect(() => {
+    if (!focusHandle) return;
+    document.querySelector<HTMLElement>(`[data-handle="${focusHandle}"]`)?.focus();
+    setFocusHandle(null);
+  }, [focusHandle, cv.sections]);
 
   const place = (id: string, target: PlaceTarget, beforeId?: string) => {
     update((c) => { c.sections = placeSection(c.sections, id, target, beforeId); });
@@ -69,6 +78,7 @@ export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Pr
     if (dragId && dragId !== beforeId) place(dragId, target, beforeId);
     setDragId(null); setOverKey(null);
   };
+  const step = (id: string, dir: -1 | 1) => update((c) => { c.sections = moveInZone(c.sections, id, dir, c.template); });
 
   const card = (s: Section) => {
     const u = fit?.sections.find((x) => x.id === s.id);
@@ -76,57 +86,57 @@ export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Pr
     const over = !!u && u.overflowMm > 0 && s.visible;
     const z = zoneOf(cv, s);
     const isPinned = pinned?.id === s.id;
+    const title = s.type === 'personal' ? 'Persoonlijke gegevens' : s.title || SECTION_TITLES[s.type];
     return (
-      <div
-        key={s.id}
-        data-testid={`sec-${s.type}`}
-        data-sec-id={s.id}
-        className={`card ${open ? 'open' : ''} ${s.visible ? '' : 'hidden-sec'} ${over ? 'overflow' : ''} ${overKey === s.id && dragId !== s.id ? 'drop-target' : ''}`}
+      <SummaSectionCard
+        key={s.id} testid={`sec-${s.type}`} secId={s.id} title={title} open={open}
+        state={`${s.visible ? '' : 'hidden-sec'} ${over ? 'overflow' : ''}`}
+        dragTarget={overKey === s.id && dragId !== s.id}
         onDragOver={(e) => { if (dragId) { e.preventDefault(); e.stopPropagation(); setOverKey(s.id); } }}
         onDrop={(e) => { e.preventDefault(); e.stopPropagation(); drop(z, s.id); }}
-      >
-        <div className="card-head" onClick={() => setOpenId(open ? null : s.id)}>
-          <span className="handle" draggable title="Slepen" onClick={(e) => e.stopPropagation()}
+        onToggle={() => { setOpenId(open ? null : s.id); if (!open && s.visible) onPlaced(s.id, s.zone); }}
+        lead={
+          <button type="button" className="handle" draggable data-handle={s.id} aria-label={`${title} verplaatsen: sleep, of gebruik pijltje omhoog of omlaag`}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); step(s.id, e.key === 'ArrowUp' ? -1 : 1); setFocusHandle(s.id); }
+            }}
             onDragStart={(e) => { setDragId(s.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.id); }}
-            onDragEnd={() => { setDragId(null); setOverKey(null); }}><Icon name="grip" size={16} /></span>
-          <span className="card-title">{s.type === 'personal' ? 'Persoonlijke gegevens' : s.title || SECTION_TITLES[s.type]}</span>
-          {s.visible && u && u.heightMm > 0 && <span className={`usage ${over ? 'bad' : ''}`} title="Ruimte">{Math.round(u.heightMm)} mm</span>}
-          <span className="spacer" />
-          <Btn small kind="ghost" icon name={`sec-${s.type}-up`} title="Omhoog" onClick={() => update((c) => { c.sections = moveInZone(c.sections, s.id, -1, c.template); })}><Icon name="up" size={14} /></Btn>
-          <Btn small kind="ghost" icon name={`sec-${s.type}-down`} title="Omlaag" onClick={() => update((c) => { c.sections = moveInZone(c.sections, s.id, 1, c.template); })}><Icon name="down" size={14} /></Btn>
-          {s.visible ? (
-            <>
-              {!single && !isPinned && (
-                <div className="seg zone-seg" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className={s.zone === 'primary' ? 'on' : ''} title="Naar hoofdinhoud" data-testid={`sec-${s.type}-zone-primary`}
-                    onClick={() => place(s.id, 'primary')}>Hoofd</button>
-                  <button type="button" className={s.zone === 'supplementary' ? 'on' : ''} title="Naar aanvullende inhoud" data-testid={`sec-${s.type}-zone-supplementary`}
-                    onClick={() => place(s.id, 'supplementary')}>Aanvullend</button>
+            onDragEnd={() => { setDragId(null); setOverKey(null); }}><Icon name="grip" size={16} /></button>
+        }
+        badges={s.visible && u && u.heightMm > 0 ? <span className={`usage ${over ? 'bad' : ''}`} title="Ruimte op de pagina">{Math.round(u.heightMm)} mm{over ? ' · te lang' : ''}</span> : undefined}
+        trail={
+          <>
+            {!single && !isPinned && (
+              <div className="zone-seg-wrap">
+                <div className={`seg zone-seg ${s.visible ? '' : 'is-disabled'}`} role="radiogroup" aria-label={`Plaatsing van ${title}`}>
+                  <button type="button" role="radio" aria-checked={s.zone === 'primary'} disabled={!s.visible} className={s.zone === 'primary' ? 'on' : ''} title="Naar hoofdinhoud"
+                    data-testid={`sec-${s.type}-zone-primary`} onClick={() => place(s.id, 'primary')}>Hoofd</button>
+                  <button type="button" role="radio" aria-checked={s.zone === 'supplementary'} disabled={!s.visible} className={s.zone === 'supplementary' ? 'on' : ''} title="Naar aanvullende inhoud"
+                    data-testid={`sec-${s.type}-zone-supplementary`} onClick={() => place(s.id, 'supplementary')}>Aanvullend</button>
                 </div>
-              )}
-              <Btn small kind="ghost" icon name={`sec-${s.type}-toggle`} title="Verbergen (niet in cv)" onClick={() => place(s.id, 'hidden')}><Icon name="eyeoff" size={14} /></Btn>
-            </>
-          ) : (
-            <Btn small name={`sec-${s.type}-toggle`} title={`Tonen in ${s.zone === 'primary' ? 'hoofdinhoud' : 'aanvullende inhoud'}`} onClick={() => { update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.visible = true; }); onPlaced(s.id, s.zone); }}>Tonen</Btn>
-          )}
-        </div>
-        {open && (
-          <div className="card-body">
-            <Field label="Titel in cv">
-              <TextInput name="sec-title" value={s.title} onChange={(v) => update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.title = v; })} />
-            </Field>
-            <SectionEditor s={s} cv={cv} update={update} />
-            {s.type !== 'personal' && (
-              <div className="card-foot">
-                <Btn kind="danger" small name={`sec-${s.type}-delete`}
-                  onClick={() => { if (confirm(`"${s.title}" verwijderen?`)) update((c) => { c.sections = c.sections.filter((x) => x.id !== s.id); }); }}>
-                  <Icon name="trash" size={14} /> Verwijderen
-                </Btn>
               </div>
             )}
-          </div>
-        )}
-      </div>
+            <SummaToggle labelHidden name={`sec-${s.type}-toggle`} label={`${title} tonen in cv`} checked={s.visible}
+              onChange={(v) => {
+                if (!v) place(s.id, 'hidden');
+                else { update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.visible = true; }); onPlaced(s.id, s.zone); }
+              }} />
+            <SummaMenu name={`sec-${s.type}-menu`} label={`Meer acties voor ${title}`} items={[
+              { key: 'up', label: 'Omhoog', testid: `sec-${s.type}-up`, onSelect: () => step(s.id, -1) },
+              { key: 'down', label: 'Omlaag', testid: `sec-${s.type}-down`, onSelect: () => step(s.id, 1) },
+              ...(s.type !== 'personal' ? [{
+                key: 'del', label: 'Onderdeel verwijderen…', danger: true, testid: `sec-${s.type}-delete`,
+                onSelect: () => { if (confirm(`"${s.title}" verwijderen?`)) update((c) => { c.sections = c.sections.filter((x) => x.id !== s.id); }); }
+              }] : [])
+            ]} />
+          </>
+        }
+      >
+        <SummaField label="Titel in cv">
+          <SummaTextInput name="sec-title" value={s.title} onChange={(v) => update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.title = v; })} />
+        </SummaField>
+        <SectionEditor s={s} cv={cv} update={update} />
+      </SummaSectionCard>
     );
   };
 
@@ -146,11 +156,11 @@ export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Pr
             onDrop={(e) => { e.preventDefault(); drop(g.key); }}>
             <div className="zone-title">{g.label}<span className="count">{list.length}</span></div>
             {list.map(card)}
-            {list.length === 0 && <div className="zone-empty">—</div>}
+            {list.length === 0 && <div className="zone-empty">{dragId ? 'Hier neerzetten' : 'Leeg'}</div>}
           </div>
         );
       })}
-      <AddMenu cv={cv} onAdd={(n) => { update((c) => { c.sections.push(n); }); setOpenId(n.id); }} />
+      <AddMenu cv={cv} onAdd={(n) => { update((c) => { c.sections.push(n); }); setOpenId(n.id); onPlaced(n.id, n.zone); }} />
     </div>
   );
 }

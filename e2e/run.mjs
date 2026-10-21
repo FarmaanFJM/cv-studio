@@ -49,7 +49,7 @@ async function saved(page) {
 const secs = (page) => page.$$eval('.cv-page [data-sec]', (els) => els.map((e) => e.dataset.title));
 const open = async (page, type) => {
   const card = page.locator(`[data-testid="sec-${type}"]`);
-  if (!(await card.locator('.card-body').count())) await card.locator('.card-head').click();
+  if (!(await card.locator('.card-body').count())) await card.getByTestId(`sec-${type}-expand`).click();
   return card;
 };
 
@@ -117,10 +117,12 @@ await scenario('2. Foto uploaden, bijsnijden en bewaren (ook na herstart)', asyn
   await personal.getByTestId('photo-input').setInputFiles(photoFile);
   await page.waitForSelector('.cv-page .photo img');
   await personal.getByTestId('photo-zoom').fill('2');
-  await personal.getByTestId('shape-square').click();
   const box = await personal.getByTestId('crop-view').boundingBox();
   await page.mouse.move(box.x + 85, box.y + 85);
   await page.mouse.down(); await page.mouse.move(box.x + 40, box.y + 85, { steps: 5 }); await page.mouse.up();
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('photo-shape-square').click();
+  await page.getByTestId('tab-sections').click();
   await saved(page);
   const before = await page.locator('.cv-page .photo').first().evaluate((e) => ({ r: getComputedStyle(e).borderRadius, l: e.querySelector('img').style.left, w: e.querySelector('img').style.width }));
   assert(before.r === '0px', 'foto niet vierkant: ' + before.r);
@@ -166,6 +168,7 @@ await scenario('5. Opleiding toevoegen (voorbereiding volgorde-test)', async () 
 await scenario('5b. Volgorde wijzigen met pijlen', async () => {
   const order1 = await secs(page);
   assert(order1.indexOf('Projecten') < order1.indexOf('Opleiding'), 'standaard: projecten vóór opleiding verwacht: ' + order1);
+  await page.getByTestId('sec-education-menu').click();
   await page.getByTestId('sec-education-up').click();
   const order2 = await secs(page);
   assert(order2.indexOf('Opleiding') < order2.indexOf('Projecten'), 'volgorde niet gewijzigd: ' + order2);
@@ -365,7 +368,7 @@ await scenario('15. Vaardigheden: lijst, groepen en niveaus (chips, stippen)', a
   const sk = await open(page, 'skills');
   await sk.getByTestId('skill-mode-levels').click();
   assert(await sk.getByTestId('skill-0').count() === 1, 'groepen ontbreken');
-  await sk.getByTestId('skill-0').locator('.item-head').click();
+  await sk.getByTestId('skill-0').locator('.item-toggle').click();
   await sk.getByTestId('skill-0-level').fill('4');
   await sk.getByTestId('skill-display-chips').click();
   assert(await page.locator('.cv-page .chip').count() >= 2, 'chips ontbreken');
@@ -396,7 +399,7 @@ await scenario('17. Stijl: lettertype zoeken, numerieke invoer, kleuren met hex'
   await page.getByTestId('tab-style').click();
   await page.getByTestId('font-select').click();
   await page.getByTestId('font-search').fill('mont');
-  assert(await page.locator('.font-list button').count() === 1, 'zoeken filtert niet');
+  assert(await page.locator('.font-list [role="option"]').count() === 1, 'zoeken filtert niet');
   await page.getByTestId('font-montserrat').click();
   const fam = await page.locator('.cv-page').evaluate((e) => getComputedStyle(e).fontFamily);
   assert(/Montserrat/.test(fam), 'font niet toegepast: ' + fam);
@@ -438,9 +441,11 @@ await scenario('18. Kopbalk-sjabloon met iconen; iconen uit; één pagina', asyn
   assert(await page.locator('.t-header .band').count() === 1, 'kopbalk ontbreekt');
   assert(await page.locator('.t-header .band .ic').count() >= 3, 'iconen ontbreken');
   assert(await page.locator('.t-header .band svg.ic path').evaluateAll((p) => p.some((x) => (x.getAttribute('d') || '').startsWith('M20.447'))), 'LinkedIn-icoon ontbreekt');
-  await page.locator('label.toggle', { hasText: 'Contacticonen' }).click();
+  await page.getByTestId('tab-style').click();
+  await page.locator('label.toggle', { hasText: 'Toon contacticonen' }).click();
   assert(await page.locator('.t-header .band .ic').count() === 0, 'iconen blijven staan');
-  await page.locator('label.toggle', { hasText: 'Contacticonen' }).click();
+  await page.locator('label.toggle', { hasText: 'Toon contacticonen' }).click();
+  await page.getByTestId('tab-layout').click();
   await page.getByTestId('item-layout-dates-left').click();
   assert(await page.locator('.il-dates-left').count() === 1, 'datums-links niet actief');
   await page.getByTestId('item-layout-inline').click();
@@ -505,31 +510,29 @@ await scenario('22. Kopbalk-template: contactblok vast in de kop', async () => {
 });
 
 
-await scenario('23. Tech-iconen: automatisch, per skill, suggesties, chips, projecten, links, merkkleuren, PDF', async () => {
+await scenario('23. Tech-iconen: weergave, automatisch, per skill, suggesties, projecten, links, merkkleuren, PDF', async () => {
   await page.getByTestId('tab-layout').click();
   await page.getByTestId('tpl-header').click();
   await page.getByTestId('tab-sections').click();
   const tech = (id) => page.locator(`.cv-page svg[data-tech="${id}"]`).count();
   const sk = await open(page, 'skills');
   await sk.getByTestId('skill-mode-grouped').click();
+  // 'Tekst' toont nooit iconen, ook niet als ze globaal aan staan
   await sk.getByTestId('skill-display-text').click();
-  await sk.getByTestId('skill-icons-auto').click();
+  assert(await page.locator('.cv-page .sec-skills svg.tic').count() === 0, 'tekstweergave toont iconen');
+  assert((await page.locator('.cv-page .sec-skills').innerText()).includes('TypeScript, Python'), 'tekstweergave veranderd');
+  await sk.getByTestId('skill-display-inline').click();
   for (const id of ['typescript', 'database', 'java', 'react', 'nodejs', 'api', 'git', 'github', 'docker', 'godot']) {
     assert(await tech(id) >= 1, `icoon ${id} ontbreekt in preview`);
   }
   assert(await tech('python') === 1, 'python ontbreekt');
   await page.screenshot({ path: path.join(out, 'tech-iconen-tekst.png') });
-  // uit = alleen tekst
-  await sk.getByTestId('skill-icons-off').click();
-  assert(await page.locator('.cv-page .sec-skills svg.tic').count() === 0, 'iconen blijven staan bij "zonder iconen"');
-  assert((await page.locator('.cv-page .sec-skills').innerText()).includes('TypeScript, Python'), 'tekstweergave veranderd');
-  await sk.getByTestId('skill-icons-auto').click();
   // per skill: Python -> geen icoon, Git -> terminal
-  await sk.getByTestId('skill-0').locator('.item-head').click().catch(() => {});
+  await sk.getByTestId('skill-0').locator('.item-toggle').click().catch(() => {});
   await page.getByTestId('skill-pill-python').first().click();
   await page.getByTestId('icon-pick-none').click();
   assert(await tech('python') === 0, 'python-icoon niet verwijderd');
-  await sk.getByTestId('skill-2').locator('.item-head').click();
+  await sk.getByTestId('skill-2').locator('.item-toggle').click();
   await page.getByTestId('skill-pill-git').first().click();
   await page.getByTestId('icon-search').fill('termi');
   await page.getByTestId('icon-pick-terminal').click();
@@ -549,13 +552,13 @@ await scenario('23. Tech-iconen: automatisch, per skill, suggesties, chips, proj
   await sk.getByTestId('skill-display-chips').click();
   assert(await page.locator('.cv-page .sec-skills .chip.has-icon svg').count() >= 6, 'chips met icoon ontbreken');
   await page.screenshot({ path: path.join(out, 'tech-iconen-chips.png') });
-  // projecten: tech-stack chips
+  // projecten: tech stack als 'Icoon + label'
   const pr = await open(page, 'projects');
-  await pr.getByTestId('tech-display-chips').click();
-  assert(await page.locator('.cv-page .sec-projects .tech-chips .chip.has-icon').count() >= 3, 'tech-chips in project ontbreken');
-  await pr.locator('label.toggle', { hasText: 'Iconen' }).click();
-  assert(await page.locator('.cv-page .sec-projects .tech-chips svg').count() === 0, 'project-iconen blijven bij uitzetten');
-  await pr.locator('label.toggle', { hasText: 'Iconen' }).click();
+  await pr.getByTestId('tech-display-inline').click();
+  assert(await page.locator('.cv-page .sec-projects .tech-chips.plain .chip.has-icon').count() >= 3, 'tech-iconen in project ontbreken');
+  await pr.getByTestId('tech-display-text').click();
+  assert(await page.locator('.cv-page .sec-projects svg[data-tech]').count() === 0, 'project-tekstweergave toont iconen');
+  await pr.getByTestId('tech-display-inline').click();
   // links met GitHub/LinkedIn-iconen
   await page.getByTestId('add-section').click();
   await page.getByTestId('add-links').click();
@@ -571,26 +574,18 @@ await scenario('23. Tech-iconen: automatisch, per skill, suggesties, chips, proj
   const nameColor = await page.locator('.cv-page .sec-projects .tech-chips .tn').first().evaluate((e) => getComputedStyle(e).color);
   assert(nameColor === await page.locator('.cv-page').evaluate((e) => getComputedStyle(e).color), 'technaam heeft niet de gewone tekstkleur: ' + nameColor);
   await page.getByTestId('tab-style').click();
-  await page.getByTestId('techcolor-brand').click();
-  assert(await look('skills', 'typescript') === 'multi', 'originele kleuren niet toegepast op lichte achtergrond');
-  await page.getByTestId('techcolor-mono').click();
+  await page.getByTestId('tech-global-color-brand').click();
+  assert(await look('skills', 'typescript') === 'multi', 'merkkleuren niet toegepast op lichte achtergrond');
+  await page.getByTestId('tech-global-color-mono').click();
   assert(await look('projects', 'typescript') === 'mono' && await look('skills', 'typescript') === 'mono', 'monochroom niet toegepast');
-  // eigen keuze per onderdeel wint van de globale stijl
-  await page.getByTestId('tab-sections').click();
-  await open(page, 'skills');
-  await sk.getByTestId('sec-techcolor-brand').click();
-  assert(await look('skills', 'typescript') === 'multi' && await look('projects', 'typescript') === 'mono', 'override per onderdeel werkt niet');
-  await sk.getByTestId('sec-techcolor-inherit').click();
-  await page.getByTestId('tab-style').click();
-  await page.getByTestId('techcolor-auto').click();
-  // zijbalk-sjabloon: aanvullende inhoud op gekleurd vlak blijft monochroom, ook bij 'originele kleuren'
+  // zijbalk-sjabloon: aanvullende inhoud op gekleurd vlak blijft monochroom, ook bij 'merkkleuren'
   await page.getByTestId('tab-layout').click();
   await page.getByTestId('tpl-sidebar').click();
   await page.getByTestId('tab-style').click();
-  await page.getByTestId('techcolor-brand').click();
+  await page.getByTestId('tech-global-color-brand').click();
   assert(await look('skills', 'react') === 'mono', 'merkkleur op gekleurde zijbalk niet teruggevallen op monochroom');
   assert(await look('projects', 'react') === 'multi', 'project-tech niet gekleurd in zijbalk-sjabloon');
-  await page.getByTestId('techcolor-auto').click();
+  await page.getByTestId('tech-global-color-auto').click();
   await page.getByTestId('tab-layout').click();
   await page.getByTestId('tpl-header').click();
   await page.getByTestId('tab-sections').click();
@@ -609,7 +604,6 @@ await scenario('23. Tech-iconen: automatisch, per skill, suggesties, chips, proj
   assert(imgs <= 1, `iconen als bitmap in PDF (${imgs} afbeeldingen; alleen de profielfoto mag een bitmap zijn)`);
   fs.copyFileSync(path.join(out, 'Voorbeeld Persoon.pdf'), path.join(out, 'tech-export.pdf'));
 });
-
 
 await scenario('24. PDF per template: tech-logo\'s in juiste kleuren, één pagina, tekst selecteerbaar', async () => {
   await page.getByTestId('tab-layout').click();
@@ -640,6 +634,301 @@ await scenario('24. PDF per template: tech-logo\'s in juiste kleuren, één pagi
     if (tpl !== 'minimal') assert(leftCyan === 0, `${tpl}: gekleurde logo's in aanvullende inhoud (${leftCyan} cyaan-pixels)`);
   }
   await page.getByTestId('tpl-header').click();
+});
+
+
+// ================= v3.0.0: UX-herontwerp =================
+const techLook = (pg, sec, id) => pg.locator(`.cv-page .sec-${sec} svg[data-tech="${id}"]`).first().getAttribute('data-look');
+const radio = (loc) => loc.getAttribute('aria-checked');
+const openAccordion = async (loc) => { if ((await loc.getByTestId('sec-tech-accordion').getAttribute('aria-expanded')) !== 'true') await loc.getByTestId('sec-tech-accordion').click(); };
+
+await scenario('25. Globaal: Toon iconen aan/uit, kleurkeuze blijft bewaard', async () => {
+  await page.getByTestId('tab-style').click();
+  const n = () => page.locator('.cv-page .sec-skills svg[data-tech], .cv-page .sec-projects svg[data-tech]').count();
+  assert(await n() > 0, 'uitgangspunt: iconen zichtbaar');
+  await page.getByTestId('tech-global-color-mono').click();
+  assert(await radio(page.getByTestId('tech-global-color-mono')) === 'true', 'mono niet gekozen');
+  await page.getByTestId('toggle-tech-icons').click();
+  assert(await n() === 0, 'iconen blijven zichtbaar na uitzetten');
+  assert(await page.getByTestId('tech-global-color-brand').isDisabled(), 'kleurkeuze niet uitgeschakeld bij iconen uit');
+  assert(await page.locator('.cv-page .sec-skills').innerText().then((t) => t.includes('TypeScript')), 'technamen verdwijnen bij iconen uit');
+  assert(await page.getByTestId('tech-global').innerText().then((t) => /blijft bewaard/.test(t)), 'afhankelijkheid niet uitgelegd');
+  await page.getByTestId('toggle-tech-icons').click();
+  assert(await n() > 0, 'iconen niet teruggekomen');
+  assert(await radio(page.getByTestId('tech-global-color-mono')) === 'true', 'kleurkeuze niet bewaard na uit/aan');
+  assert(await techLook(page, 'projects', 'typescript') === 'mono', 'preview volgt kleurkeuze niet');
+  await page.getByTestId('tech-global-color-auto').click();
+  // contacticonen zijn onafhankelijk
+  await page.getByTestId('toggle-tech-icons').click();
+  assert(await page.locator('.cv-page .band .ic').count() >= 3, 'contacticonen verdwenen met tech-iconen');
+  await page.getByTestId('toggle-tech-icons').click();
+});
+
+await scenario('26. Per onderdeel: volgt stijl / eigen instellingen, voorrangsregels', async () => {
+  await page.getByTestId('tab-sections').click();
+  const pr = await open(page, 'projects');
+  await openAccordion(pr);
+  assert((await pr.getByTestId('tech-badge').innerText()) === 'Volgt stijl', 'badge standaard');
+  assert(/Volgt/.test(await pr.getByTestId('tech-inherit-note').innerText()), 'overgeërfde instelling niet zichtbaar');
+  await pr.getByTestId('tech-source-custom').click();
+  assert((await pr.getByTestId('tech-badge').innerText()) === 'Eigen', 'badge eigen');
+  await pr.locator('label.toggle', { hasText: 'Toon iconen' }).click();
+  assert(await page.locator('.cv-page .sec-projects svg[data-tech]').count() === 0, 'project-iconen blijven bij eigen uit');
+  assert(await page.locator('.cv-page .sec-skills svg[data-tech]').count() > 0, 'andere onderdelen worden beïnvloed');
+  assert(await pr.getByTestId('tech-color-brand').isDisabled(), 'kleur niet uitgeschakeld bij eigen uit');
+  await pr.locator('label.toggle', { hasText: 'Toon iconen' }).click();
+  await pr.getByTestId('tech-color-mono').click();
+  assert(await techLook(page, 'projects', 'typescript') === 'mono', 'eigen kleur (mono) niet toegepast');
+  // 1. globaal uit gaat voor een eigen onderdeelinstelling (aan) en voor keuzes per vaardigheid
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('toggle-tech-icons').click();
+  await page.getByTestId('tab-sections').click();
+  assert(await page.locator('.cv-page svg[data-tech]').count() === 0, 'iconen ondanks globaal uit');
+  await open(page, 'projects');
+  assert(await pr.locator('label.toggle', { hasText: 'Toon iconen' }).locator('input').isDisabled(), 'sectietoggle niet uitgeschakeld bij globaal uit');
+  assert(/globaal/i.test(await pr.innerText()), 'uitleg bij globaal uit ontbreekt');
+  const sk = await open(page, 'skills');
+  await sk.getByTestId('skill-0').locator('.item-toggle').click().catch(() => {});
+  assert(await sk.getByTestId('pills-off').count() >= 1, 'keuzes per vaardigheid zetten iconen toch aan');
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('toggle-tech-icons').click();
+  await page.getByTestId('tab-sections').click();
+  await open(page, 'projects');
+  // terug naar standaard: volgt weer de globale stijl, eigen waarden blijven bewaard
+  await open(page, 'projects');
+  await pr.getByTestId('tech-source-default').click();
+  assert(await techLook(page, 'projects', 'typescript') === 'multi', 'standaard (auto) niet hersteld');
+  await page.screenshot({ path: path.join(out, 'v3-tech-sectie.png') });
+  // eigen instelling opnieuw aan voor de persistentietest
+  await pr.getByTestId('tech-source-custom').click();
+  await pr.getByTestId('tech-color-mono').click();
+});
+
+await scenario('27. Instellingen blijven bewaard na heropenen en bij wisselen van template', async () => {
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('tech-global-color-brand').click();
+  await saved(page);
+  await app.close();
+  ({ app, page } = await launch());
+  await page.getByTestId('tab-style').click();
+  assert(await radio(page.getByTestId('tech-global-color-brand')) === 'true', 'globale kleurkeuze niet bewaard');
+  assert(await radio(page.getByTestId('toggle-tech-icons')) === null && await page.getByTestId('toggle-tech-icons').isChecked(), 'globaal toon iconen niet bewaard');
+  await page.getByTestId('tab-sections').click();
+  const pr = await open(page, 'projects');
+  await openAccordion(pr);
+  assert(await radio(pr.getByTestId('tech-source-custom')) === 'true' && await radio(pr.getByTestId('tech-color-mono')) === 'true', 'sectie-override niet bewaard');
+  assert(await techLook(page, 'projects', 'typescript') === 'mono', 'preview na heropenen niet gelijk');
+  for (const tpl of ['minimal', 'sidebar', 'header']) {
+    await page.getByTestId('tab-layout').click();
+    await page.getByTestId(`tpl-${tpl}`).click();
+    await page.getByTestId('tab-style').click();
+    assert(await radio(page.getByTestId('tech-global-color-brand')) === 'true', `globale kleur verloren bij ${tpl}`);
+    await page.getByTestId('tab-sections').click();
+    assert(await radio(pr.getByTestId('tech-color-mono')) === 'true', `sectie-override verloren bij ${tpl}`);
+  }
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('tech-global-color-auto').click();
+  await page.getByTestId('tab-sections').click();
+  await pr.getByTestId('tech-source-default').click();
+});
+
+await scenario('28. Toetsenbord: tabs, segmented, getal, slider, accordion, menu, tooltip, verplaatsen', async () => {
+  const focusRing = () => page.evaluate(() => { const cs = getComputedStyle(document.activeElement); return { s: cs.outlineStyle, w: parseFloat(cs.outlineWidth) }; });
+  await page.getByTestId('tab-sections').focus();
+  await page.keyboard.press('ArrowRight');
+  assert(await page.getByTestId('tab-layout').getAttribute('aria-selected') === 'true', 'pijltje rechts wisselt niet van tab');
+  const ring = await focusRing();
+  assert(ring.s !== 'none' && ring.w >= 2, 'geen zichtbare focus op tab: ' + JSON.stringify(ring));
+  await page.getByTestId('item-layout-inline').focus();
+  await page.keyboard.press('ArrowRight');
+  assert(await radio(page.getByTestId('item-layout-dates-left')) === 'true', 'segmented reageert niet op pijltjes');
+  await page.keyboard.press('ArrowLeft');
+  await page.getByTestId('tab-style').click();
+  const fs = page.getByTestId('fontsize');
+  const before = Number(await fs.inputValue());
+  await fs.focus();
+  await page.keyboard.press('ArrowUp');
+  assert(Number(await fs.inputValue()) === Math.min(12, before + 0.5), 'pijltje omhoog in getalveld');
+  await page.keyboard.press('ArrowDown');
+  const slider = page.getByRole('slider', { name: 'Lettergrootte' });
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  assert(Number(await fs.inputValue()) === before + 0.5, 'slider reageert niet op toetsenbord');
+  await page.keyboard.press('ArrowLeft');
+  await page.getByTestId('more-type').focus();
+  await page.keyboard.press('Enter');
+  assert(await page.getByTestId('more-type').getAttribute('aria-expanded') === 'true', 'accordion opent niet met Enter');
+  await page.getByTestId('more-type').click();
+  // tooltip op focus, met toegankelijke naam
+  await page.getByTestId('cv-duplicate').focus();
+  await page.waitForSelector('[role="tooltip"]');
+  assert((await page.locator('[role="tooltip"]').innerText()) === 'Dupliceren', 'tooltip-tekst');
+  assert(await page.getByTestId('cv-duplicate').getAttribute('aria-label') === 'Dupliceren', 'icoonknop zonder toegankelijke naam');
+  await page.keyboard.press('Escape');
+  assert(await page.locator('[role="tooltip"]').count() === 0, 'Escape sluit tooltip niet');
+  // menu: pijltjes + Escape, focus terug
+  await page.getByTestId('tab-sections').click();
+  await page.getByTestId('sec-profile-menu').click();
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('role')) === 'menuitem', 'menu focust eerste item niet');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Escape');
+  assert(await page.locator('[role="menu"]').count() === 0, 'Escape sluit menu niet');
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'sec-profile-menu', 'focus keert niet terug naar menuknop');
+  // volgorde met toetsenbord via de sleepgreep
+  const order = () => page.locator('[data-testid="zone-primary"] [data-sec-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+  const o1 = await order();
+  const handle = page.getByTestId(o1[0]).locator('.handle');
+  await handle.focus();
+  await page.keyboard.press('ArrowDown');
+  const o2 = await order();
+  assert(o2[0] === o1[1] && o2[1] === o1[0], `toetsenbordvolgorde: ${o1} -> ${o2}`);
+  assert(await page.evaluate(() => document.activeElement?.classList.contains('handle')), 'focus verdwijnt na verplaatsen');
+  await page.keyboard.press('ArrowUp');
+});
+
+await scenario('29. Slider slepen, typen zonder terugspringen, grenzen', async () => {
+  await page.getByTestId('tab-style').click();
+  const px = () => page.locator('.cv-page').evaluate((e) => parseFloat(getComputedStyle(e).fontSize) * 72 / 96);
+  const slider = page.getByRole('slider', { name: 'Lettergrootte' });
+  const box = await slider.boundingBox();
+  await page.mouse.move(box.x + 9, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height / 2, { steps: 12 });
+  const mid = await px();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2, { steps: 12 });
+  const half = await px();
+  await page.mouse.up();
+  assert(mid > 11 && half > 9.5 && half < 10.5 && Math.abs(Number(await page.getByTestId('fontsize').inputValue()) - half) < 0.01, `slepen: ${mid} / ${half}`);
+  const input = page.getByTestId('fontsize');
+  await input.click();
+  await input.press('Control+A');
+  await page.keyboard.type('1');
+  assert((await input.inputValue()) === '1', 'invoer springt terug tijdens typen');
+  assert(await page.getByText('Kies een waarde van 8 tot 12').count() === 1, 'geen lokale validatiemelding');
+  assert(await input.getAttribute('aria-invalid') === 'true', 'aria-invalid ontbreekt');
+  await page.keyboard.type('0.5');
+  assert((await input.inputValue()) === '10.5' && Math.abs(await px() - 10.5) < 0.01, 'typen van 10.5: ' + await input.inputValue());
+  await page.keyboard.press('Enter');
+  await page.getByTestId('fontsize').fill('9.5');
+});
+
+await scenario('30. Kleurkiezer: ongeldige hex geeft lokale feedback; eigen kleur blijft bewaard', async () => {
+  await page.getByTestId('color-accent').click();
+  const hex = page.getByTestId('color-accent-hex');
+  await hex.fill('#12');
+  assert(await hex.getAttribute('aria-invalid') === 'true', 'ongeldige hex niet gemarkeerd');
+  assert(await page.getByText('Ongeldige kleur').count() === 1, 'foutmelding ontbreekt');
+  await hex.fill('#7a3cff');
+  assert(await hex.getAttribute('aria-invalid') === null, 'fout blijft staan na correctie');
+  assert(await page.locator('.cv-page').evaluate((e) => getComputedStyle(e).getPropertyValue('--accent').trim()) === '#7a3cff', 'preview volgt niet direct');
+  await page.getByTestId('color-accent-save').click();
+  await page.keyboard.press('Escape');
+  assert(await page.getByTestId('color-accent-pop').count() === 0, 'Escape sluit kleurkiezer niet');
+  await saved(page);
+  await app.close();
+  ({ app, page } = await launch());
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('color-sidebar').click();
+  assert(await page.getByTestId('saved-swatches').locator('button').count() >= 1, 'eigen kleur niet bewaard na heropenen');
+  await page.keyboard.press('Escape');
+});
+
+await scenario('31. Preview: zoomen zonder vervorming, passend herstellen', async () => {
+  const holder = page.locator('.page-holder');
+  const w0 = (await holder.boundingBox()).width;
+  await page.getByTestId('zoom-in').click();
+  await page.getByTestId('zoom-in').click();
+  const b1 = await holder.boundingBox();
+  assert(b1.width > w0 * 1.2, 'inzoomen werkt niet');
+  assert(Math.abs(b1.width / b1.height - 210 / 297) < 0.01, `pagina vervormd: ${b1.width}x${b1.height}`);
+  await page.getByTestId('zoom-fit').click();
+  const b2 = await holder.boundingBox();
+  assert(Math.abs(b2.width - w0) < 1.5, 'passend herstelt niet');
+  const pane = await page.locator('.preview-pane').boundingBox();
+  assert(b2.height <= pane.height + 1 && pane.height - b2.height < 40, `ongebruikte ruimte om de pagina: pane ${pane.height} pagina ${b2.height}`);
+});
+
+await scenario('32. Editor smal en breed: geen horizontale overloop, schermafbeeldingen', async () => {
+  const splitter = async (x) => {
+    const sp = await page.getByTestId('splitter').boundingBox();
+    await page.mouse.move(sp.x + 3, sp.y + 300);
+    await page.mouse.down(); await page.mouse.move(x, sp.y + 300, { steps: 8 }); await page.mouse.up();
+  };
+  for (const [label, x] of [['smal', 300], ['breed', 1000]]) {
+    await splitter(x);
+    for (const [tab, extra] of [['sections', async () => { await open(page, 'skills'); }], ['layout', async () => {}], ['style', async () => { await page.getByTestId('more-colors').click(); }]]) {
+      await page.getByTestId(`tab-${tab}`).click();
+      await extra();
+      const m = await page.locator('.editor-scroll').evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }));
+      assert(m.sw <= m.cw + 1, `${label}/${tab}: horizontale overloop ${m.sw} > ${m.cw}`);
+      await page.screenshot({ path: path.join(out, `v3-editor-${label}-${tab}.png`) });
+    }
+    const w = (await page.locator('.editor').boundingBox()).width;
+    assert(label === 'smal' ? w >= 395 && w < 450 : w > 900, `editorbreedte ${label}: ${w}`);
+  }
+  await splitter(640);
+});
+
+await scenario('33. Toegankelijkheid (axe-core, WCAG 2.2 AA) op alle tabs', async () => {
+  await page.evaluate(fs.readFileSync(path.join(root, 'node_modules/axe-core/axe.min.js'), 'utf8')); // via CDP: de strikte CSP van de app blijft ongemoeid
+  const bad = [];
+  for (const tab of ['sections', 'layout', 'style']) {
+    await page.getByTestId(`tab-${tab}`).click();
+    if (tab === 'sections') { const p = await open(page, 'projects'); await openAccordion(p); }
+    if (tab === 'style') { await page.getByTestId('more-colors').click().catch(() => {}); await page.getByTestId('color-accent').click(); }
+    const res = await page.evaluate(async () => {
+      const r = await window.axe.run({ include: [['.editor'], ['.preview-top']] }, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } });
+      return r.violations.map((v) => ({ id: v.id, impact: v.impact, n: v.nodes.length, target: v.nodes.slice(0, 2).map((x) => x.target.join(' ')) }));
+    });
+    if (tab === 'style') await page.keyboard.press('Escape');
+    for (const v of res) if (v.impact === 'serious' || v.impact === 'critical') bad.push(`${tab}: ${v.id} (${v.n}) ${v.target.join(' | ')}`);
+    for (const v of res) if (v.impact !== 'serious' && v.impact !== 'critical') console.log(`     (axe ${v.impact}) ${tab}: ${v.id} x${v.n}`);
+  }
+  assert(bad.length === 0, 'axe-schendingen:\n     ' + bad.join('\n     '));
+});
+
+await scenario('34. Versie 3.0.0 zichtbaar', async () => {
+  assert((await page.getByTestId('app-version').innerText()) === 'v3.0.0', 'versie: ' + await page.getByTestId('app-version').innerText());
+});
+
+await scenario('35. Migratie van v2-opslag (oude tech-instellingen) behoudt het uiterlijk', async () => {
+  await app.close();
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'cvstudio-v2-'));
+  fs.mkdirSync(path.join(ud, 'data'));
+  const sec = (o) => ({ visible: true, zone: 'primary', ...o });
+  const v2 = { version: 3, activeId: 'v2', swatches: ['#112233'], cvs: [{ id: 'v2', name: 'Oud v2', template: 'minimal', style: { accent: '#0f766e', sidebarBg: '#0f766e', techColors: true, icons: true },
+    personal: { fullName: 'Twee Gebruiker', title: 'Dev', email: 'a@b.nl', phone: '', location: '', linkedin: '', github: '', website: '' }, photo: null,
+    sections: [
+      sec({ id: 'p', type: 'personal', title: 'Contact', zone: 'supplementary' }),
+      sec({ id: 'sk1', type: 'skills', title: 'Zonder', mode: 'flat', display: 'text', icons: 'off', techColor: 'inherit', groups: [{ id: 'g', name: '', skills: ['React'] }] }),
+      sec({ id: 'sk2', type: 'skills', title: 'Met', mode: 'flat', display: 'text', icons: 'auto', techColor: 'inherit', groups: [{ id: 'g2', name: '', skills: ['Docker'] }] }),
+      sec({ id: 'pr', type: 'projects', title: 'Projecten', techDisplay: 'chips', techIcons: true, techColor: 'mono', items: [{ id: 'i', name: 'Proj', tech: 'TypeScript, Python', period: '', description: '', github: '' }] }),
+      sec({ id: 'pr2', type: 'projects', title: 'Projecten zonder', techDisplay: 'chips', techIcons: false, techColor: 'inherit', items: [{ id: 'i2', name: 'Proj2', tech: 'Git', period: '', description: '', github: '' }] }),
+      sec({ id: 'cu', type: 'custom', title: 'Links', mode: 'keyvalue', icons: true, techColor: 'inherit', text: '', items: [{ id: 'k', text: 'GitHub', value: 'github.com/x' }] })
+    ] }] };
+  fs.writeFileSync(path.join(ud, 'data/cvs.json'), JSON.stringify(v2));
+  ({ app, page } = await launch({ CV_STUDIO_USER_DATA: ud }));
+  const has = (sec, id) => page.locator(`.cv-page .sec-${sec} svg[data-tech="${id}"]`).count();
+  assert(await page.locator('.cv-page').innerText().then((t) => t.includes('Twee Gebruiker')), 'v2-gegevens ontbreken');
+  const cards = await page.locator('.cv-page [data-sec]').evaluateAll((els) => els.map((e) => [e.getAttribute('data-sec'), e.querySelectorAll('svg[data-tech]').length]));
+  const m = Object.fromEntries(cards);
+  assert(m.sk1 === 0, 'skills zonder iconen kregen iconen');
+  assert(m.sk2 === 1, 'skills met iconen verloren hun icoon');
+  assert(m.pr === 2 && m.pr2 === 0, `projecten: ${JSON.stringify(m)}`);
+  assert(m.cu >= 1, 'links verloren icoon');
+  assert(await page.locator('.cv-page .sec-projects svg[data-look="mono"]').count() === 2, 'oude kleurkeuze (mono) niet behouden');
+  await page.getByTestId('tab-style').click();
+  assert(await radio(page.getByTestId('tech-global-color-brand')) === 'true', 'oude techColors-schakelaar niet omgezet naar merkkleuren');
+  await page.getByTestId('color-sidebar').click();
+  assert(await page.getByTestId('saved-swatches').locator('button').count() === 1, 'bewaarde kleuren niet behouden');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('tab-sections').click();
+  const pr = page.locator('[data-sec-id="pr"]');
+  await pr.getByTestId('sec-projects-expand').click();
+  await openAccordion(pr);
+  assert(await radio(pr.getByTestId('tech-source-custom')) === 'true' && await radio(pr.getByTestId('tech-color-mono')) === 'true', 'sectie-override uit v2 niet zichtbaar in de editor');
+  fs.rmSync(ud, { recursive: true, force: true });
+  ({ app, page } = await (async () => { await app.close(); return launch(); })());
 });
 
 await app.close();

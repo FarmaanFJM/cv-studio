@@ -71,7 +71,7 @@ describe('migratie van v1 en validatie van stijl', () => {
       style: { accent: '#0f766e', font: 'lato', fontSize: 10, spacing: 'compact' },
       sections: [{ id: 'a', type: 'skills', title: 'Skills', visible: true, groups: [{ id: 'g', name: 'Tools', skills: ['Git'] }] }] }] });
     const cv = state.cvs[0];
-    expect(state.version).toBe(3);
+    expect(state.version).toBe(4);
     expect(cv.style.sidebarBg).toBe('#0f766e');
     expect(cv.style).toMatchObject({ sectionGap: 3.6, margin: 10, font: 'lato' });
     const sk = cv.sections.find((s) => s.type === 'skills')!;

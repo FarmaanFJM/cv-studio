@@ -10,6 +10,7 @@ export interface CvApi {
   importJson(): Promise<Result<{ cv: CV }>>;
   exportPdf(cv: CV): Promise<Result<{ path: string; pages: number }>>;
   getPrintCv(): Promise<CV | null>;
+  getVersion(): Promise<string>;
   isPrintMode: boolean;
 }
 
@@ -31,14 +32,15 @@ const browserApi: CvApi = {
       if (t) return sanitizeState(JSON.parse(t));
     } catch { /* ignore */ }
     const cv = createEmptyCv();
-    return { version: 3, activeId: cv.id, cvs: [cv], swatches: [] };
+    return { version: 4, activeId: cv.id, cvs: [cv], swatches: [] };
   },
   async saveState(s) { localStorage.setItem(KEY, JSON.stringify(s)); return { ok: true }; },
   saveStateSync(s) { localStorage.setItem(KEY, JSON.stringify(s)); return { ok: true }; },
   async exportJson() { return { ok: false, error: 'Alleen beschikbaar in de desktopapp.' }; },
   async importJson() { return { ok: false, error: 'Alleen beschikbaar in de desktopapp.' }; },
   async exportPdf() { return { ok: false, error: 'Alleen beschikbaar in de desktopapp.' }; },
-  async getPrintCv() { return null; }
+  async getPrintCv() { return null; },
+  async getVersion() { return 'dev'; }
 };
 
 export const api: CvApi = window.cvApi ?? browserApi;
