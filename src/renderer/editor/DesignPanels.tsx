@@ -98,7 +98,11 @@ export function StylePanel({ cv, update, swatches, onSaveSwatch }: {
           <NumberField label="Lettergrootte" unit="pt" min={MIN_FONT_PT} max={MAX_FONT_PT} step={0.5} value={st.fontSize} name="fontsize" onChange={set('fontSize')} slider />
           <NumberField label="Regelafstand" min={1.2} max={1.8} step={0.05} value={st.lineHeight} name="lineHeight" onChange={set('lineHeight')} slider />
         </div>
-        <Toggle name="toggle-tech-colors" label="Merkkleuren bij tech-iconen" value={st.techColors} onChange={set('techColors')} />
+        <div className="field">
+          <span className="field-label">Tech-iconen</span>
+          <Segmented name="techcolor" value={st.techColorMode} onChange={set('techColorMode')}
+            options={[{ value: 'auto', label: 'Automatisch', title: 'Hoofdinhoud in merkkleuren, aanvullende inhoud monochroom' }, { value: 'brand', label: 'Originele kleuren' }, { value: 'mono', label: 'Monochroom' }]} />
+        </div>
         <div className="field">
           <span className="field-label">Koppen</span>
           <Segmented name="heading-style" value={st.headingStyle} onChange={set('headingStyle')}

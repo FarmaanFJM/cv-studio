@@ -53,6 +53,40 @@ const open = async (page, type) => {
   return card;
 };
 
+
+// --- minimale PNG-decoder (8 bit RGB/RGBA, zonder interlacing) voor pixelcontrole van gerenderde PDF's ---
+function decodePng(buf) {
+  let pos = 8, w = 0, h = 0, ct = 0; const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos), type = buf.toString('ascii', pos + 4, pos + 8), data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4); ct = data[9]; if (data[8] !== 8 || data[12] !== 0) throw new Error('png-formaat'); }
+    if (type === 'IDAT') idat.push(data);
+    pos += 12 + len;
+  }
+  const bpp = ct === 6 ? 4 : 3, stride = w * bpp, raw = zlib.inflateSync(Buffer.concat(idat)), px = Buffer.alloc(h * stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const v = raw[y * (stride + 1) + 1 + x], a = x >= bpp ? px[y * stride + x - bpp] : 0, b = y ? px[(y - 1) * stride + x] : 0, c = x >= bpp && y ? px[(y - 1) * stride + x - bpp] : 0;
+      let r = v;
+      if (f === 1) r = v + a; else if (f === 2) r = v + b; else if (f === 3) r = v + ((a + b) >> 1);
+      else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); r = v + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c); }
+      px[y * stride + x] = r & 255;
+    }
+  }
+  return { w, h, bpp, px };
+}
+function countNear(img, rgb, dist, x0, x1) {
+  let n = 0;
+  for (let y = 0; y < img.h; y++) for (let x = x0; x < Math.min(x1, img.w); x++) {
+    const o = (y * img.w + x) * img.bpp;
+    if (Math.hypot(img.px[o] - rgb[0], img.px[o + 1] - rgb[1], img.px[o + 2] - rgb[2]) < dist) n++;
+  }
+  return n;
+}
+import { execFileSync } from 'node:child_process';
+const hasPdftoppm = (() => { try { execFileSync('pdftoppm', ['-v'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+
 const results = [];
 async function scenario(name, fn) {
   try { await fn(); results.push([true, name]); console.log('  ✓', name); }
@@ -530,12 +564,35 @@ await scenario('23. Tech-iconen: automatisch, per skill, suggesties, chips, proj
   await links.getByTestId('custom-0-text').fill('GitHub');
   await links.locator('input[placeholder="Waarde"]').first().fill('github.com/voorbeeld');
   assert(await page.locator('.cv-page .sec-custom svg[data-tech="github"]').count() === 1, 'github-icoon bij link ontbreekt');
-  // merkkleuren (header-template: lichte achtergrond -> merkkleur toegepast)
+  // kleurbeleid (header-sjabloon: aanvullende kolom licht, projecten in hoofdinhoud)
+  const look = (sec, id) => page.locator(`.cv-page .sec-${sec} svg[data-tech="${id}"]`).first().getAttribute('data-look');
+  assert(await look('skills', 'typescript') === 'mono', 'aanvullende inhoud niet monochroom (auto): ' + await look('skills', 'typescript'));
+  assert(await look('projects', 'typescript') === 'multi', 'project-tech niet in merkkleur (auto): ' + await look('projects', 'typescript'));
+  const nameColor = await page.locator('.cv-page .sec-projects .tech-chips .tn').first().evaluate((e) => getComputedStyle(e).color);
+  assert(nameColor === await page.locator('.cv-page').evaluate((e) => getComputedStyle(e).color), 'technaam heeft niet de gewone tekstkleur: ' + nameColor);
   await page.getByTestId('tab-style').click();
-  assert(await page.locator('.cv-page .sec-skills svg[data-tech="typescript"]').first().evaluate((e) => getComputedStyle(e).color) !== 'rgb(51, 120, 198)', 'merkkleur staat standaard aan');
-  await page.locator('label.toggle', { hasText: 'Merkkleuren' }).click();
-  const c = await page.locator('.cv-page .sec-skills svg[data-tech="typescript"]').first().evaluate((e) => getComputedStyle(e).color);
-  assert(c === 'rgb(49, 120, 198)', 'merkkleur niet toegepast: ' + c);
+  await page.getByTestId('techcolor-brand').click();
+  assert(await look('skills', 'typescript') === 'multi', 'originele kleuren niet toegepast op lichte achtergrond');
+  await page.getByTestId('techcolor-mono').click();
+  assert(await look('projects', 'typescript') === 'mono' && await look('skills', 'typescript') === 'mono', 'monochroom niet toegepast');
+  // eigen keuze per onderdeel wint van de globale stijl
+  await page.getByTestId('tab-sections').click();
+  await open(page, 'skills');
+  await sk.getByTestId('sec-techcolor-brand').click();
+  assert(await look('skills', 'typescript') === 'multi' && await look('projects', 'typescript') === 'mono', 'override per onderdeel werkt niet');
+  await sk.getByTestId('sec-techcolor-inherit').click();
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('techcolor-auto').click();
+  // zijbalk-sjabloon: aanvullende inhoud op gekleurd vlak blijft monochroom, ook bij 'originele kleuren'
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-sidebar').click();
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('techcolor-brand').click();
+  assert(await look('skills', 'react') === 'mono', 'merkkleur op gekleurde zijbalk niet teruggevallen op monochroom');
+  assert(await look('projects', 'react') === 'multi', 'project-tech niet gekleurd in zijbalk-sjabloon');
+  await page.getByTestId('techcolor-auto').click();
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-header').click();
   await page.getByTestId('tab-sections').click();
   assert(!(await page.getByTestId('export-pdf').isDisabled()), 'export geblokkeerd door tech-iconen');
   await page.getByTestId('export-pdf').click();
@@ -551,6 +608,38 @@ await scenario('23. Tech-iconen: automatisch, per skill, suggesties, chips, proj
   const imgs = ops.fnArray.filter((f) => f === pdfjs.OPS.paintImageXObject || f === pdfjs.OPS.paintInlineImageXObject).length;
   assert(imgs <= 1, `iconen als bitmap in PDF (${imgs} afbeeldingen; alleen de profielfoto mag een bitmap zijn)`);
   fs.copyFileSync(path.join(out, 'Voorbeeld Persoon.pdf'), path.join(out, 'tech-export.pdf'));
+});
+
+
+await scenario('24. PDF per template: tech-logo\'s in juiste kleuren, één pagina, tekst selecteerbaar', async () => {
+  await page.getByTestId('tab-layout').click();
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  for (const tpl of ['sidebar', 'header', 'minimal']) {
+    await page.getByTestId(`tpl-${tpl}`).click();
+    await page.waitForSelector(`.cv-page.t-${tpl}`);
+    await page.getByTestId('toast').click().catch(() => {});
+    await page.waitForFunction(() => !document.querySelector('[data-testid="toast"]'));
+    await page.getByTestId('export-pdf').click();
+    await page.waitForFunction(() => /1 pagina/.test(document.querySelector('[data-testid="toast"]')?.textContent || ''));
+    const file = path.join(out, `tech-color-${tpl}.pdf`);
+    fs.copyFileSync(path.join(out, 'Voorbeeld Persoon.pdf'), file);
+    const bytes = fs.readFileSync(file);
+    assert((await PDFDocument.load(bytes)).getPageCount() === 1, `${tpl}: niet 1 pagina`);
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true }).promise;
+    const text = (await (await pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(' ');
+    for (const n of ['TypeScript', 'Node.js', 'React']) assert(text.includes(n), `${tpl}: tekst ${n} niet selecteerbaar`);
+    await page.getByTestId('toast').click().catch(() => {});
+    if (!hasPdftoppm) { console.log('     (pdftoppm niet beschikbaar: pixelcontrole overgeslagen)'); continue; }
+    execFileSync('pdftoppm', ['-r', '100', '-png', file, path.join(out, `tech-color-${tpl}`)]);
+    const img = decodePng(fs.readFileSync(path.join(out, `tech-color-${tpl}-1.png`)));
+    const sideEdge = tpl === 'minimal' ? 0 : Math.round(70 / 25.4 * 100); // 70 mm aanvullende kolom (minimal heeft er geen)
+    const cyan = [97, 218, 251], tsBlue = [49, 120, 198];
+    const mainCyan = countNear(img, cyan, 38, sideEdge, img.w), mainTs = countNear(img, tsBlue, 30, sideEdge, img.w), leftCyan = countNear(img, cyan, 38, 0, sideEdge);
+    assert(mainCyan > 15, `${tpl}: React-cyaan ontbreekt in de gerenderde PDF (${mainCyan})`);
+    assert(mainTs > 15, `${tpl}: TypeScript-blauw ontbreekt in de gerenderde PDF (${mainTs})`);
+    if (tpl !== 'minimal') assert(leftCyan === 0, `${tpl}: gekleurde logo's in aanvullende inhoud (${leftCyan} cyaan-pixels)`);
+  }
+  await page.getByTestId('tpl-header').click();
 });
 
 await app.close();

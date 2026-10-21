@@ -248,10 +248,18 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
   }
 }
 
+/** Kleurmodus voor tech-iconen van dit onderdeel: eigen keuze, anders de globale stijl; plus plaatsing en achtergrond. */
+function techCtx(s: Section, cv: CV) {
+  const own = s.type === 'skills' || s.type === 'projects' || s.type === 'custom' ? s.techColor : 'inherit';
+  const zone = cv.template === 'minimal' ? 'primary' : s.zone;
+  const onColor = cv.template === 'sidebar' && zone === 'supplementary';
+  return { mode: own === 'inherit' ? cv.style.techColorMode : own, zone, bg: onColor ? cv.style.sidebarBg : '#ffffff' } as const;
+}
+
 export function SectionBlock({ s, cv, onPick }: { s: Section; cv: CV; onPick?: (id: string) => void }) {
   if (!s.visible || !hasContent(s, cv)) return null;
   return (
-    <TechCtx.Provider value={{ brandColors: cv.style.techColors, bg: cv.template === 'sidebar' && s.zone === 'supplementary' ? cv.style.sidebarBg : '#ffffff' }}>
+    <TechCtx.Provider value={techCtx(s, cv)}>
       <section className={`sec sec-${s.type}`} data-sec={s.id} data-title={s.title} onClick={() => onPick?.(s.id)}>
         <h2>{s.title}</h2>
         <SectionBody s={s} cv={cv} />

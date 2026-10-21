@@ -1,5 +1,5 @@
 import React from 'react';
-import { CV, Section, SKILL_LEVEL_NAMES, newItem, newSkillGroup, uid } from '../../shared/model';
+import { CV, Section, SKILL_LEVEL_NAMES, TechColorSetting, newItem, newSkillGroup, uid } from '../../shared/model';
 import { Icon } from '../icons';
 import { Btn, Field, ItemShell, ListInput, NumberField, Segmented, TextArea, TextInput, Toggle, move } from './fields';
 import { SkillPills } from './TechEditor';
@@ -14,6 +14,15 @@ function useSec(update: Upd, id: string) {
 
 const AddBtn = ({ children, onClick, name }: { children: React.ReactNode; onClick: () => void; name?: string }) => (
   <Btn name={name} onClick={onClick}><Icon name="plus" size={14} /> {children}</Btn>
+);
+
+/** Eigen kleurmodus voor de tech-iconen van dit onderdeel (anders geldt de globale stijl). */
+const TechColorSeg = ({ value, onChange }: { value: TechColorSetting; onChange: (v: TechColorSetting) => void }) => (
+  <div className="field">
+    <span className="field-label">Kleur iconen</span>
+    <Segmented name="sec-techcolor" value={value} onChange={onChange}
+      options={[{ value: 'inherit', label: 'Stijl', title: 'Volg de instelling in Stijl' }, { value: 'auto', label: 'Auto' }, { value: 'brand', label: 'Origineel' }, { value: 'mono', label: 'Mono' }]} />
+  </div>
 );
 
 const DESC_PH = 'Beschrijving (- = opsomming)';
@@ -96,6 +105,7 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
               options={[{ value: 'text', label: 'Tekst' }, { value: 'chips', label: 'Chips' }]} />
             {s.techDisplay === 'chips' && <Toggle name="tech-icons" label="Iconen" value={s.techIcons} onChange={(v) => edit<typeof s>((x) => { x.techIcons = v; })} />}
           </div>
+          {s.techDisplay === 'chips' && s.techIcons && <TechColorSeg value={s.techColor} onChange={(v) => edit<typeof s>((x) => { x.techColor = v; })} />}
           {s.items.map((it, i) => (
             <ItemShell key={it.id} name={`proj-${i}`} title={it.name} index={i} count={s.items.length}
               onUp={() => edit<typeof s>((x) => { x.items = move(x.items, i, i - 1); })}
@@ -129,6 +139,7 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
             <Segmented name="skill-icons" value={s.icons} onChange={(m) => edit<typeof s>((x) => { x.icons = m; })}
               options={[{ value: 'off', label: 'Zonder iconen', title: 'Alleen tekst' }, { value: 'auto', label: 'Met iconen', title: 'Bekende technologieën krijgen automatisch een icoon' }]} />
           </div>
+          {s.icons === 'auto' && <TechColorSeg value={s.techColor} onChange={(v) => edit<typeof s>((x) => { x.techColor = v; })} />}
           {s.mode === 'flat' ? (
             <>
               <ListInput suggest name="skill-flat" value={s.groups.flatMap((g) => g.skills)} placeholder="Vaardigheid, vaardigheid, …"
@@ -193,6 +204,7 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
           <Segmented name="custom-mode" value={s.mode} onChange={(m) => edit<typeof s>((x) => { x.mode = m; })}
             options={[{ value: 'text', label: 'Tekst' }, { value: 'list', label: 'Lijst' }, { value: 'keyvalue', label: 'Label + waarde' }]} />
           {s.mode !== 'text' && <Toggle name="custom-icons" label="Iconen (GitHub, LinkedIn, tech …)" value={s.icons} onChange={(v) => edit<typeof s>((x) => { x.icons = v; })} />}
+          {s.mode !== 'text' && s.icons && <TechColorSeg value={s.techColor} onChange={(v) => edit<typeof s>((x) => { x.techColor = v; })} />}
           {s.mode === 'text' ? (
             <TextArea name="custom-text" placeholder="Tekst" value={s.text} onChange={(v) => edit<typeof s>((x) => { x.text = v; })} />
           ) : (

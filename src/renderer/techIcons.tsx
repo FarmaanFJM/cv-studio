@@ -98,7 +98,9 @@ import {
   siYarn
 } from 'simple-icons';
 import { BRAND_PATHS } from './icons';
-import { contrast } from '../shared/color';
+import { contrast, luminance } from '../shared/color';
+import type { TechColorMode } from '../shared/model';
+import { BRAND_MULTI } from './brandIcons.generated';
 
 export type TechGroup = 'Talen' | 'Frameworks' | 'Data' | 'Tools' | 'Platformen' | 'Game & 3D' | 'Algemeen';
 
@@ -110,6 +112,8 @@ export interface TechDef {
   /** merk-icoon: gevuld pad op 24x24 */
   path?: string;
   hex?: string;
+  /** originele meerkleurige logo (uit devicon, MIT); alleen aanwezig als er een officieel kleurenlogo beschikbaar is */
+  multi?: { vb: string; body: string };
   /** algemeen icoon: lijntekening */
   draw?: React.ReactNode;
 }
@@ -272,27 +276,53 @@ export function suggestTech(partial: string, limit = 6): TechDef[] {
   return TECH_ICONS.map((t) => ({ t, s: score(t) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.t);
 }
 
+for (const t of TECH_ICONS) t.multi = BRAND_MULTI[t.id];
+
 // ---------- weergave ----------
 
-export interface TechRenderCtx { brandColors: boolean; bg: string }
-export const TechCtx = React.createContext<TechRenderCtx>({ brandColors: false, bg: '#ffffff' });
+/** Context van een onderdeel: gekozen kleurmodus, waar het staat en welke achtergrond erachter zit. */
+export interface TechRenderCtx { mode: TechColorMode; zone: 'primary' | 'supplementary'; bg: string }
+export const TechCtx = React.createContext<TechRenderCtx>({ mode: 'mono', zone: 'supplementary', bg: '#ffffff' });
 
-/** Eén icoon. Standaard in de tekstkleur (consistent over alle sjablonen); optioneel in merkkleur als het contrast genoeg is. */
+export type IconLook = { kind: 'mono' } | { kind: 'multi' } | { kind: 'single'; color: string };
+
+/** Achtergronden die licht genoeg zijn voor meerkleurige logo's. */
+export const isLightBg = (bg: string) => luminance(bg) >= 0.45;
+
+/**
+ * Bepaalt hoe een icoon eruitziet.
+ * - auto: hoofdinhoud = merkkleuren, aanvullende inhoud = monochroom (rustig en leesbaar op gekleurde vlakken)
+ * - brand: merkkleuren waar dat leesbaar is; op een donkere/gekleurde achtergrond of bij te weinig contrast valt het terug op monochroom
+ * - mono: altijd de voorgrondkleur van het onderdeel
+ * Algemene iconen en merken zonder kleurenlogo/merkkleur blijven monochroom; er worden geen kleuren verzonnen.
+ */
+export function resolveIconLook(t: TechDef, ctx: TechRenderCtx): IconLook {
+  const mode = ctx.mode === 'auto' ? (ctx.zone === 'primary' ? 'brand' : 'mono') : ctx.mode;
+  if (mode === 'mono' || !t.path) return { kind: 'mono' };
+  if (t.multi && isLightBg(ctx.bg)) return { kind: 'multi' };
+  if (t.hex && contrast(`#${t.hex.toLowerCase()}`, ctx.bg) >= 3) return { kind: 'single', color: `#${t.hex}` };
+  return { kind: 'mono' };
+}
+
+/** Eén icoon, consistent van formaat (1.1em). Meerkleurige logo's zijn vectoren en blijven dat ook in de PDF. */
 export function TechIcon({ id }: { id: string }) {
   const t = getTech(id);
   const ctx = React.useContext(TechCtx);
   if (!t) return null;
-  if (t.path) {
-    const color = ctx.brandColors && t.hex && contrast(`#${t.hex.toLowerCase()}`, ctx.bg) >= 3 ? `#${t.hex}` : undefined;
+  if (!t.path) {
     return (
-      <svg className="tic" viewBox="0 0 24 24" fill="currentColor" style={color ? { color } : undefined} aria-hidden="true" data-tech={t.id}>
-        <path d={t.path} />
+      <svg className="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-tech={t.id} data-look="mono">
+        {t.draw}
       </svg>
     );
   }
+  const look = resolveIconLook(t, ctx);
+  if (look.kind === 'multi' && t.multi) {
+    return <svg className="tic" viewBox={t.multi.vb} aria-hidden="true" data-tech={t.id} data-look="multi" dangerouslySetInnerHTML={{ __html: t.multi.body }} />;
+  }
   return (
-    <svg className="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-tech={t.id}>
-      {t.draw}
+    <svg className="tic" viewBox="0 0 24 24" fill="currentColor" style={look.kind === 'single' ? { color: look.color } : undefined} aria-hidden="true" data-tech={t.id} data-look={look.kind}>
+      <path d={t.path} />
     </svg>
   );
 }

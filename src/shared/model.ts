@@ -13,6 +13,9 @@ export type SkillMode = 'flat' | 'grouped' | 'levels';
 export type ListDisplay = 'text' | 'list' | 'chips';
 export type TechIconMode = 'off' | 'auto';
 export type TechDisplay = 'text' | 'chips';
+/** Kleur van technologie-iconen: automatisch (op basis van plaatsing/achtergrond), originele merkkleuren of monochroom. */
+export type TechColorMode = 'auto' | 'brand' | 'mono';
+export type TechColorSetting = 'inherit' | TechColorMode;
 export type LangDisplay = 'text' | 'dots';
 export type HeadingStyle = 'caps' | 'title' | 'plain';
 export type ItemLayout = 'inline' | 'dates-left';
@@ -57,10 +60,10 @@ export type Section =
   | (SectionBase & { type: 'profile'; text: string })
   | (SectionBase & { type: 'experience'; items: ExperienceItem[] })
   | (SectionBase & { type: 'education'; items: EducationItem[] })
-  | (SectionBase & { type: 'projects'; techDisplay: TechDisplay; techIcons: boolean; items: ProjectItem[] })
-  | (SectionBase & { type: 'skills'; mode: SkillMode; display: ListDisplay; icons: TechIconMode; iconOverrides: Record<string, string>; groups: SkillGroup[] })
+  | (SectionBase & { type: 'projects'; techDisplay: TechDisplay; techIcons: boolean; techColor: TechColorSetting; items: ProjectItem[] })
+  | (SectionBase & { type: 'skills'; mode: SkillMode; display: ListDisplay; icons: TechIconMode; techColor: TechColorSetting; iconOverrides: Record<string, string>; groups: SkillGroup[] })
   | (SectionBase & { type: 'languages'; display: LangDisplay; items: LanguageItem[] })
-  | (SectionBase & { type: 'custom'; mode: 'text' | 'list' | 'keyvalue'; icons: boolean; text: string; items: CustomItem[] });
+  | (SectionBase & { type: 'custom'; mode: 'text' | 'list' | 'keyvalue'; icons: boolean; techColor: TechColorSetting; text: string; items: CustomItem[] });
 
 export interface StyleSettings {
   accent: string;
@@ -80,7 +83,7 @@ export interface StyleSettings {
   itemLayout: ItemLayout;
   icons: boolean;
   nameInSidebar: boolean;
-  techColors: boolean; // technologie-iconen in merkkleur (anders in de tekstkleur)
+  techColorMode: TechColorMode;
 }
 
 export interface CV {
@@ -167,7 +170,7 @@ export const emptyPersonal = (): Personal => ({
 export const defaultStyle = (): StyleSettings => ({
   accent: '#1f4e79', sidebarBg: '#1f4e79', headingColor: '', textColor: '', dividerColor: '',
   font: 'inter', fontSize: 9.5, lineHeight: 1.4, sectionGap: 5.6, itemGap: 2.4, margin: 13, sidebarWidth: 70, photoSize: 40,
-  headingStyle: 'caps', itemLayout: 'inline', icons: true, nameInSidebar: false, techColors: false
+  headingStyle: 'caps', itemLayout: 'inline', icons: true, nameInSidebar: false, techColorMode: 'auto'
 });
 
 export function newItem(type: 'experience'): ExperienceItem;
@@ -188,7 +191,7 @@ export function newSkillGroup(name = '', level = 0): SkillGroup { return { id: u
 
 export interface SectionPreset { key: string; label: string; zone: Zone; make: () => Section }
 const custom = (title: string, zone: Zone, mode: 'text' | 'list' | 'keyvalue', icons = false): Section =>
-  ({ id: uid(), type: 'custom', title, visible: true, zone, mode, icons, text: '', items: [] });
+  ({ id: uid(), type: 'custom', title, visible: true, zone, mode, icons, techColor: 'inherit', text: '', items: [] });
 
 export function newCustomSection(): Section { return custom('Nieuw onderdeel', 'primary', 'text'); }
 
@@ -197,7 +200,7 @@ export const SECTION_PRESETS: SectionPreset[] = [
   { key: 'interests', label: 'Interesses', zone: 'supplementary', make: () => custom('Interesses', 'supplementary', 'list') },
   { key: 'certs', label: 'Certificaten', zone: 'supplementary', make: () => custom('Certificaten', 'supplementary', 'list') },
   { key: 'links', label: 'Links', zone: 'supplementary', make: () => custom('Links', 'supplementary', 'keyvalue', true) },
-  { key: 'tech', label: 'Technologieën & tools', zone: 'supplementary', make: () => ({ id: uid(), type: 'skills', title: 'Technologieën', visible: true, zone: 'supplementary', mode: 'flat', display: 'chips', icons: 'auto', iconOverrides: {}, groups: [newSkillGroup()] }) },
+  { key: 'tech', label: 'Technologieën & tools', zone: 'supplementary', make: () => ({ id: uid(), type: 'skills', title: 'Technologieën', visible: true, zone: 'supplementary', mode: 'flat', display: 'chips', icons: 'auto', techColor: 'inherit', iconOverrides: {}, groups: [newSkillGroup()] }) },
   { key: 'about', label: 'Over mij', zone: 'supplementary', make: () => custom('Over mij', 'supplementary', 'text') },
   { key: 'extra', label: 'Extra informatie', zone: 'supplementary', make: () => custom('Extra informatie', 'supplementary', 'text') },
   { key: 'stats', label: 'Gegevens / maten', zone: 'supplementary', make: () => custom('Gegevens', 'supplementary', 'keyvalue') },
@@ -211,8 +214,8 @@ export function emptySection(type: SectionType): Section {
     case 'profile': return { ...base, type, text: '' };
     case 'experience': return { ...base, type, items: [] };
     case 'education': return { ...base, type, items: [] };
-    case 'projects': return { ...base, type, techDisplay: 'text', techIcons: true, items: [] };
-    case 'skills': return { ...base, type, mode: 'grouped', display: 'text', icons: 'off', iconOverrides: {}, groups: [] };
+    case 'projects': return { ...base, type, techDisplay: 'text', techIcons: true, techColor: 'inherit', items: [] };
+    case 'skills': return { ...base, type, mode: 'grouped', display: 'text', icons: 'off', techColor: 'inherit', iconOverrides: {}, groups: [] };
     case 'languages': return { ...base, type, display: 'text', items: [] };
     default: return newCustomSection();
   }
@@ -312,6 +315,7 @@ function normalizeZone(v: unknown, d: Zone): Zone {
   return d;
 }
 
+const techColorSetting = (v: unknown): TechColorSetting => oneOf(v, ['inherit', 'auto', 'brand', 'mono'] as const, 'inherit');
 const ICON_ID = /^[a-z0-9-]{1,40}$/;
 /** Per-vaardigheid icoon-keuzes: sleutel = genormaliseerde naam, waarde = icoon-id of 'none'. */
 function sanitizeOverrides(v: unknown): Record<string, string> {
@@ -347,7 +351,7 @@ function sanitizeSection(raw: unknown): Section | null {
         id: id(i.id), degree: str(i.degree, 300), school: str(i.school, 300),
         start: str(i.start, 60), end: str(i.end, 60), description: str(i.description) })) };
     case 'projects':
-      return { ...base, type: 'projects', techDisplay: oneOf(raw.techDisplay, ['text', 'chips'] as const, 'text'), techIcons: bool(raw.techIcons, true), items: arr(raw.items).filter(isObj).map((i) => ({
+      return { ...base, type: 'projects', techDisplay: oneOf(raw.techDisplay, ['text', 'chips'] as const, 'text'), techIcons: bool(raw.techIcons, true), techColor: techColorSetting(raw.techColor), items: arr(raw.items).filter(isObj).map((i) => ({
         id: id(i.id), name: str(i.name, 300), tech: str(i.tech, 500), period: str(i.period, 60),
         description: str(i.description), github: str(i.github, 500) })) };
     case 'skills':
@@ -355,6 +359,7 @@ function sanitizeSection(raw: unknown): Section | null {
         mode: oneOf(raw.mode, ['flat', 'grouped', 'levels'] as const, 'grouped'),
         display: oneOf(raw.display, ['text', 'list', 'chips'] as const, 'text'),
         icons: oneOf(raw.icons, ['off', 'auto'] as const, 'off'),
+        techColor: techColorSetting(raw.techColor),
         iconOverrides: sanitizeOverrides(raw.iconOverrides),
         groups: arr(raw.groups).filter(isObj).map((g) => ({
           id: id(g.id), name: str(g.name, 200), level: Math.round(num(g.level, 0, 0, 5)),
@@ -364,7 +369,7 @@ function sanitizeSection(raw: unknown): Section | null {
         items: arr(raw.items).filter(isObj).map((i) => ({
           id: id(i.id), name: str(i.name, 200), level: str(i.level, 200), rating: Math.round(num(i.rating, 0, 0, 5)) })) };
     case 'custom':
-      return { ...base, type: 'custom', mode: oneOf(raw.mode, ['text', 'list', 'keyvalue'] as const, 'text'), icons: bool(raw.icons, false), text: str(raw.text),
+      return { ...base, type: 'custom', mode: oneOf(raw.mode, ['text', 'list', 'keyvalue'] as const, 'text'), icons: bool(raw.icons, false), techColor: techColorSetting(raw.techColor), text: str(raw.text),
         items: arr(raw.items).filter(isObj).map((i) => ({ id: id(i.id), text: str(i.text, 2000), value: str(i.value, 2000) })) };
   }
 }
@@ -395,7 +400,8 @@ function sanitizeStyle(raw: unknown): StyleSettings {
     itemLayout: oneOf(s.itemLayout, ['inline', 'dates-left'] as const, d.itemLayout),
     icons: bool(s.icons, d.icons),
     nameInSidebar: bool(s.nameInSidebar, d.nameInSidebar),
-    techColors: bool(s.techColors, d.techColors)
+    // v2.0-migratie: de oude schakelaar 'techColors' (merkkleur aan) wordt 'brand'; anders geldt het nieuwe automatische gedrag
+    techColorMode: oneOf(s.techColorMode, ['auto', 'brand', 'mono'] as const, s.techColors === true ? 'brand' : d.techColorMode)
   };
 }
 
