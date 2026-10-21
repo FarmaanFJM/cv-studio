@@ -1,0 +1,24 @@
+name: Windows build
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run dist
+      # Rooktest van de echte Windows-build: dezelfde e2e-scenario's tegen de gebouwde .exe
+      - run: node e2e/run.mjs
+        env:
+          CV_STUDIO_EXE: ${{ github.workspace }}\release\win-unpacked\CV Studio.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CV-Studio-Setup
+          path: release/CV-Studio-Setup-*.exe

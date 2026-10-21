@@ -1,0 +1,23 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-400-italic.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/inter/latin-700.css';
+import '@fontsource/source-sans-3/latin-400.css';
+import '@fontsource/source-sans-3/latin-400-italic.css';
+import '@fontsource/source-sans-3/latin-600.css';
+import '@fontsource/source-sans-3/latin-700.css';
+import '@fontsource/lato/latin-400.css';
+import '@fontsource/lato/latin-400-italic.css';
+import '@fontsource/lato/latin-700.css';
+import '@fontsource/merriweather/latin-400.css';
+import '@fontsource/merriweather/latin-400-italic.css';
+import '@fontsource/merriweather/latin-700.css';
+import './templates/cv.css';
+import './app.css';
+import { App } from './App';
+import { PrintView } from './PrintView';
+import { api } from './api';
+
+createRoot(document.getElementById('root')!).render(api.isPrintMode ? <PrintView /> : <App />);

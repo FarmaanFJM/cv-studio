@@ -1,0 +1,306 @@
+// End-to-end tests van de echte Electron-app (draai: npm run test:e2e). Gebruikt Playwright's Electron-ondersteuning.
+import { _electron as electron } from 'playwright-core';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import { PDFDocument } from 'pdf-lib';
+import { build } from 'esbuild';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const out = path.join(root, 'e2e/out');
+fs.rmSync(out, { recursive: true, force: true });
+fs.mkdirSync(out, { recursive: true });
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cvstudio-ud-'));
+
+// --- testfoto (PNG 600x400, kleurverloop) zonder extra dependencies ---
+function makePng(w, h, file) {
+  const crc = (buf) => { let c, crc = ~0; for (const b of buf) { c = (crc ^ b) & 0xff; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crc = (crc >>> 8) ^ c; } return ~crc >>> 0; };
+  const chunk = (type, data) => { const t = Buffer.from(type); const l = Buffer.alloc(4); l.writeUInt32BE(data.length); const c = Buffer.alloc(4); c.writeUInt32BE(crc(Buffer.concat([t, data]))); return Buffer.concat([l, t, data, c]); };
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) { raw[y * (w * 3 + 1)] = 0; for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1) + 1 + x * 3; raw[o] = (x * 255) / w; raw[o + 1] = (y * 255) / h; raw[o + 2] = 160; } }
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  fs.writeFileSync(file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]));
+}
+const photoFile = path.join(out, 'foto.png');
+makePng(600, 400, photoFile);
+
+async function launch(extraEnv = {}) {
+  // CV_STUDIO_EXE: test de gebouwde Windows-app (release/win-unpacked/CV Studio.exe) i.p.v. de broncode
+  const exe = process.env.CV_STUDIO_EXE;
+  const app = await electron.launch({
+    ...(exe ? { executablePath: exe } : {}),
+    args: exe ? ['--no-sandbox'] : [root, '--no-sandbox'],
+    env: { ...process.env, CV_STUDIO_USER_DATA: userData, CV_STUDIO_TEST: '1', CV_STUDIO_TEST_DIR: out, ...extraEnv }
+  });
+  const page = await app.firstWindow();
+  const requests = [];
+  page.on('request', (r) => { if (!/^(file|data|blob|devtools):/.test(r.url())) requests.push(r.url()); });
+  page.on('dialog', (d) => d.accept());
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.waitForSelector('[data-testid="page"]');
+  app.requests = requests;
+  return { app, page };
+}
+async function saved(page) {
+  await page.waitForFunction(() => document.querySelector('[data-testid="save-status"]')?.textContent === 'Alles opgeslagen');
+}
+const secs = (page) => page.$$eval('.cv-page [data-sec]', (els) => els.map((e) => e.dataset.title));
+const open = async (page, type) => {
+  const card = page.locator(`[data-testid="sec-${type}"]`);
+  if (!(await card.locator('.card-body').count())) await card.locator('.card-head').click();
+  return card;
+};
+
+const results = [];
+async function scenario(name, fn) {
+  try { await fn(); results.push([true, name]); console.log('  ✓', name); }
+  catch (e) { results.push([false, name, e]); console.log('  ✗', name, '\n    ', e.message.split('\n')[0]); }
+}
+const assert = (c, m) => { if (!c) throw new Error(m); };
+
+console.log('CV Studio e2e');
+let { app, page } = await launch();
+
+await scenario('1. Nieuw cv invullen, sluiten en opnieuw openen', async () => {
+  const personal = await open(page, 'personal');
+  await personal.getByTestId('p-fullName').fill('Test Gebruiker');
+  await personal.getByTestId('p-title').fill('Stagiair Software Engineer');
+  await personal.getByTestId('p-email').fill('test@example.com');
+  await personal.getByTestId('p-github').fill('github.com/testgebruiker');
+  const profile = await open(page, 'profile');
+  await profile.getByTestId('profile-text').fill('Derdejaars student met interesse in webontwikkeling.');
+  await saved(page);
+  await app.close();
+  ({ app, page } = await launch());
+  const text = await page.locator('.cv-page').innerText();
+  assert(text.includes('Test Gebruiker') && text.includes('Stagiair Software Engineer') && text.includes('test@example.com') && text.includes('Derdejaars student'), 'gegevens niet hersteld: ' + text.slice(0, 200));
+});
+
+await scenario('2. Foto uploaden, bijsnijden en bewaren (ook na herstart)', async () => {
+  const personal = await open(page, 'personal');
+  await personal.getByTestId('photo-input').setInputFiles(photoFile);
+  await page.waitForSelector('.cv-page .photo img');
+  await personal.getByTestId('photo-zoom').fill('2');
+  await personal.getByTestId('shape-square').click();
+  const box = await personal.getByTestId('crop-view').boundingBox();
+  await page.mouse.move(box.x + 85, box.y + 85);
+  await page.mouse.down(); await page.mouse.move(box.x + 40, box.y + 85, { steps: 5 }); await page.mouse.up();
+  await saved(page);
+  const before = await page.locator('.cv-page .photo').first().evaluate((e) => ({ r: getComputedStyle(e).borderRadius, l: e.querySelector('img').style.left, w: e.querySelector('img').style.width }));
+  assert(before.r === '0px', 'foto niet vierkant: ' + before.r);
+  await page.screenshot({ path: path.join(out, 'foto-editor.png') });
+  await app.close();
+  ({ app, page } = await launch());
+  const after = await page.locator('.cv-page .photo').first().evaluate((e) => ({ l: e.querySelector('img').style.left, w: e.querySelector('img').style.width, src: e.querySelector('img').src.slice(0, 22) }));
+  assert(after.l === before.l && after.w === before.w, `crop niet bewaard ${JSON.stringify(before)} vs ${JSON.stringify(after)}`);
+  assert(after.src.startsWith('data:image/jpeg'), 'foto niet lokaal opgeslagen');
+  assert(before.l !== '-50%' && after.w === '300%' || after.w !== '100%', 'zoom niet toegepast');
+});
+
+await scenario('3. Project toevoegen en verwijderen', async () => {
+  const proj = await open(page, 'projects');
+  await proj.getByTestId('proj-add').click();
+  await proj.getByTestId('proj-0-name').fill('Weer-app');
+  await proj.getByTestId('proj-0-desc').fill('- Gebouwd met React\n- Gebruikt een publieke API');
+  assert((await page.locator('.cv-page').innerText()).includes('Weer-app'), 'project niet in preview');
+  assert((await page.locator('.cv-page .sec-projects li').count()) === 2, 'opsommingstekens ontbreken');
+  await proj.getByTestId('proj-0-remove').click();
+  assert(!(await page.locator('.cv-page').innerText()).includes('Weer-app'), 'project niet verwijderd');
+  assert((await page.locator('.cv-page .sec-projects').count()) === 0, 'lege projectenkop blijft staan');
+});
+
+await scenario('4. Onderdelen verbergen en weer tonen', async () => {
+  const proj = await open(page, 'projects');
+  await proj.getByTestId('proj-add').click();
+  await proj.getByTestId('proj-0-name').fill('Zichtbaar project');
+  assert((await secs(page)).includes('Projecten'), 'project-sectie ontbreekt');
+  await page.getByTestId('sec-projects-toggle').click();
+  assert(!(await secs(page)).includes('Projecten'), 'sectie niet verborgen');
+  await page.getByTestId('sec-projects-toggle').click();
+  assert((await secs(page)).includes('Projecten'), 'sectie niet teruggekomen');
+  assert((await page.locator('.cv-page').innerText()).includes('Zichtbaar project'), 'inhoud na tonen verdwenen');
+});
+
+await scenario('5. Opleiding toevoegen (voorbereiding volgorde-test)', async () => {
+  const edu = await open(page, 'education');
+  await edu.getByTestId('edu-add').click();
+  await edu.getByTestId('edu-0-degree').fill('HBO Informatica');
+});
+
+await scenario('5b. Volgorde wijzigen met pijlen', async () => {
+  const order1 = await secs(page);
+  assert(order1.indexOf('Projecten') < order1.indexOf('Opleiding'), 'standaard: projecten vóór opleiding verwacht: ' + order1);
+  await page.getByTestId('sec-education-up').click();
+  const order2 = await secs(page);
+  assert(order2.indexOf('Opleiding') < order2.indexOf('Projecten'), 'volgorde niet gewijzigd: ' + order2);
+});
+
+await scenario('6. Wisselen tussen templates zonder gegevensverlies', async () => {
+  await page.getByTestId('tab-style').click();
+  const snapshot = async () => (await page.locator('.cv-page').innerText()).replace(/\s+/g, ' ');
+  await page.getByTestId('tpl-sidebar').click();
+  const a = await snapshot();
+  assert(await page.locator('.t-sidebar').count() === 1, 'zijbalk niet actief');
+  await page.screenshot({ path: path.join(out, 'template-sidebar.png') });
+  await page.getByTestId('tpl-minimal').click();
+  assert(await page.locator('.t-minimal').count() === 1, 'minimal niet actief');
+  await page.screenshot({ path: path.join(out, 'template-minimal.png') });
+  const b = await snapshot();
+  for (const needle of ['Test Gebruiker', 'Zichtbaar project', 'HBO Informatica', 'Derdejaars student']) {
+    assert(a.includes(needle) && b.includes(needle), `${needle} ontbreekt na wisselen`);
+  }
+  await page.getByTestId('tpl-sidebar').click();
+  await page.getByTestId('tab-sections').click();
+});
+
+await scenario('7. Cv dupliceren en apart bewerken', async () => {
+  await page.getByTestId('cv-duplicate').click();
+  await page.getByTestId('prompt-input').fill('ING');
+  await page.getByTestId('prompt-ok').click();
+  const names = await page.$$eval('[data-testid="version-select"] option', (o) => o.map((x) => x.textContent));
+  assert(names.length === 2 && names.includes('ING'), 'kopie ontbreekt: ' + names);
+  const personal = await open(page, 'personal');
+  await personal.getByTestId('p-title').fill('Stagiair bij ING');
+  assert((await page.locator('.cv-page').innerText()).includes('Stagiair bij ING'), 'wijziging niet in kopie');
+  await saved(page);
+  await page.getByTestId('version-select').selectOption({ label: 'Mijn cv' });
+  const t = await page.locator('.cv-page').innerText();
+  assert(t.includes('Stagiair Software Engineer') && !t.includes('Stagiair bij ING'), 'origineel is overschreven');
+});
+
+await scenario('8. PDF exporteren: precies één A4-pagina met selecteerbare tekst', async () => {
+  await page.screenshot({ path: path.join(out, 'app-hoofdvenster.png') });
+  await page.getByTestId('export-pdf').click();
+  await page.waitForSelector('[data-testid="toast"]');
+  const toast = await page.getByTestId('toast').innerText();
+  assert(toast.includes('1 pagina'), 'toast: ' + toast);
+  const file = path.join(out, 'Test Gebruiker.pdf');
+  assert(fs.existsSync(file), 'pdf ontbreekt');
+  const bytes = fs.readFileSync(file);
+  const doc = await PDFDocument.load(bytes);
+  assert(doc.getPageCount() === 1, 'aantal pagina\'s ' + doc.getPageCount());
+  const { width, height } = doc.getPage(0).getSize();
+  assert(Math.abs(width - 595.28) < 1.5 && Math.abs(height - 841.89) < 1.5, `geen A4: ${width}x${height}`);
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true }).promise;
+  const tc = await (await pdf.getPage(1)).getTextContent();
+  const text = tc.items.map((i) => i.str).join(' ');
+  for (const n of ['Test Gebruiker', 'Zichtbaar project', 'HBO Informatica', 'test@example.com']) assert(text.includes(n), `tekst niet selecteerbaar: ${n}`);
+  fs.copyFileSync(file, path.join(out, 'export-sidebar.pdf'));
+});
+
+await scenario('8b. PDF in Minimal-template ook één pagina', async () => {
+  await page.getByTestId('tab-style').click();
+  await page.getByTestId('tpl-minimal').click();
+  await page.getByTestId('export-pdf').click();
+  await page.waitForFunction(() => /1 pagina/.test(document.querySelector('[data-testid="toast"]')?.textContent || ''));
+  const doc = await PDFDocument.load(fs.readFileSync(path.join(out, 'Test Gebruiker.pdf')));
+  assert(doc.getPageCount() === 1, 'minimal niet 1 pagina');
+  fs.copyFileSync(path.join(out, 'Test Gebruiker.pdf'), path.join(out, 'export-minimal.pdf'));
+  await page.getByTestId('tab-sections').click();
+});
+
+await scenario('9. Te veel tekst: duidelijke melding, export geblokkeerd, niets verborgen', async () => {
+  await page.getByTestId('version-select').selectOption({ label: 'ING' });
+  const exp = await open(page, 'experience');
+  for (let i = 0; i < 4; i++) {
+    await exp.getByTestId('exp-add').click();
+    await exp.getByTestId(`exp-${i}-role`).fill(`Functie ${i}`);
+    await exp.getByTestId(`exp-${i}-desc`).fill(Array.from({ length: 12 }, (_, k) => `- Taak nummer ${k} met een redelijk lange omschrijving die netjes afbreekt over meerdere regels in de kolom`).join('\n'));
+  }
+  await page.waitForSelector('[data-testid="overflow-banner"]');
+  const banner = await page.getByTestId('overflow-banner').innerText();
+  assert(/te lang voor één A4-pagina/.test(banner) && /Werkervaring/.test(banner), 'banner: ' + banner);
+  assert(await page.getByTestId('export-pdf').isDisabled(), 'export niet geblokkeerd');
+  assert((await page.getByTestId('fit-badge').innerText()).includes('Past niet'), 'badge');
+  assert(await page.locator('.cv-page .is-over').count() > 0, 'overschrijdend onderdeel niet gemarkeerd');
+  assert((await page.locator('[data-testid="sec-experience"] .usage.bad').count()) === 1, 'geen ruimtebadge');
+  // alle tekst staat nog in de DOM (niets afgekapt/verborgen)
+  assert((await page.locator('.cv-page .sec-experience li').count()) === 48, 'inhoud ontbreekt');
+  // ook direct via API weigert de main-process de export
+  const r = await page.evaluate((cv) => window.cvApi.exportPdf(cv), await currentCv(page));
+  assert(r.ok === false && /past niet op één A4/.test(r.error), 'main weigert niet: ' + JSON.stringify(r));
+  await page.screenshot({ path: path.join(out, 'overflow.png') });
+  // inkorten maakt export weer mogelijk
+  await page.getByTestId('sec-experience-toggle').click();
+  await page.waitForFunction(() => !document.querySelector('[data-testid="overflow-banner"]'));
+  assert(!(await page.getByTestId('export-pdf').isDisabled()), 'export blijft geblokkeerd');
+});
+
+async function currentCv(page) {
+  const file = path.join(userData, 'data/cvs.json');
+  await saved(page);
+  const st = JSON.parse(fs.readFileSync(file, 'utf8'));
+  return st.cvs.find((c) => c.id === st.activeId);
+}
+
+await scenario('10. JSON export/import en robuustheid bij ongeldige bestanden', async () => {
+  await page.getByTestId('json-export').click();
+  await page.waitForSelector('[data-testid="toast"]');
+  assert(fs.existsSync(path.join(out, 'ING.json')), 'json-export ontbreekt');
+  await app.close();
+  fs.writeFileSync(path.join(out, 'kapot.json'), '{ dit is geen json');
+  ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'kapot.json') }));
+  await page.getByTestId('json-import').click();
+  await page.waitForSelector('[data-testid="toast"].error');
+  await app.close();
+  fs.writeFileSync(path.join(out, 'raar.json'), JSON.stringify({ cv: { name: 'Raar', template: 'x', style: { fontSize: 999, accent: 'rood' }, sections: [{ type: 'projects', items: 'nee' }, 5, null], photo: { src: 'javascript:alert(1)' } } }));
+  ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'raar.json') }));
+  await page.getByTestId('json-import').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="version-select"] option')].some((o) => /Raar/.test(o.textContent)));
+  assert(await page.locator('.cv-page').count() === 1, 'app crasht op vreemde import');
+  await app.close();
+  ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'ING.json') }));
+  await page.getByTestId('json-import').click();
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="version-select"] option').length >= 4);
+  const t = await page.locator('.cv-page').innerText();
+  assert(t.includes('Test Gebruiker'), 'import mist data');
+});
+
+await scenario('11. Corrupt opslagbestand laat de app niet crashen', async () => {
+  await app.close();
+  fs.writeFileSync(path.join(userData, 'data/cvs.json'), '\u0000\u0000{{{');
+  ({ app, page } = await launch());
+  assert(await page.locator('.cv-page').count() === 1, 'app start niet');
+  assert(fs.readdirSync(path.join(userData, 'data')).some((f) => f.startsWith('cvs.corrupt-')), 'geen backup van corrupt bestand');
+});
+
+await scenario('12. Werkt offline: geen netwerkverkeer', async () => {
+  assert(app.requests.length === 0, 'netwerkverzoeken: ' + app.requests.join(', '));
+  const sec = await page.evaluate(() => ({ node: typeof require, proc: typeof process, api: Object.keys(window.cvApi).sort().join(',') }));
+  assert(sec.node === 'undefined' && sec.proc === 'undefined', 'node-integratie in renderer actief');
+});
+
+await scenario('13. Gevuld (fictief) voorbeeld exporteert in beide templates naar één pagina', async () => {
+  await build({ entryPoints: [path.join(root, 'tests/fixtures.ts')], bundle: true, format: 'esm', outfile: path.join(out, 'fixtures.mjs'), logLevel: 'silent' });
+  const { demoCv } = await import(path.join(out, 'fixtures.mjs'));
+  const cv = demoCv();
+  const png = fs.readFileSync(photoFile).toString('base64');
+  cv.photo = { src: 'data:image/png;base64,' + png, aspect: 1.5, zoom: 1.2, offsetX: 0, offsetY: 0, shape: 'round', visible: true };
+  fs.writeFileSync(path.join(out, 'demo.json'), JSON.stringify(cv));
+  await app.close();
+  ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'demo.json') }));
+  await page.getByTestId('json-import').click();
+  await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select"]').selectedOptions[0].textContent));
+  for (const [tpl, label] of [['sidebar', 'sidebar'], ['minimal', 'minimal']]) {
+    await page.getByTestId('tab-style').click();
+    await page.getByTestId(`tpl-${tpl}`).click();
+    await page.getByTestId('tab-sections').click();
+    assert(!(await page.getByTestId('export-pdf').isDisabled()), 'export geblokkeerd bij demo');
+    await page.screenshot({ path: path.join(out, `demo-${label}.png`) });
+    await page.getByTestId('export-pdf').click();
+    await page.waitForFunction(() => /1 pagina/.test(document.querySelector('[data-testid="toast"]')?.textContent || ''));
+    fs.copyFileSync(path.join(out, 'Voorbeeld Persoon.pdf'), path.join(out, `demo-${label}.pdf`));
+    const doc = await PDFDocument.load(fs.readFileSync(path.join(out, `demo-${label}.pdf`)));
+    assert(doc.getPageCount() === 1, `${label}: ${doc.getPageCount()} pagina's`);
+    await page.evaluate(() => { document.querySelector('[data-testid="toast"]')?.click(); });
+  }
+});
+
+await app.close();
+fs.rmSync(userData, { recursive: true, force: true });
+const failed = results.filter((r) => !r[0]);
+console.log(`\n${results.length - failed.length}/${results.length} scenario's geslaagd`);
+process.exit(failed.length ? 1 : 0);
