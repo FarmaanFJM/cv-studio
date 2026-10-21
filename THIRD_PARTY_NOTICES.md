@@ -36,7 +36,7 @@ Development tools (Vite, TypeScript, Vitest, Playwright, axe-core, electron-buil
 
 ## CV Studio name and logo
 
-The CV Studio logo (`assets/brand/`, `build/icon.*`, the data URL in `src/renderer/brand.generated.ts`) was supplied by the project owner. It is included so the application and installer carry the project's branding. The MIT license of the source code does not by itself grant the right to use the CV Studio name or logo as your own branding.
+The CV Studio logo (`assets/brand/`, `build/icon.*`, the data URL in `src/renderer/brand.generated.ts`) was supplied by the project owner. It is included so the application and installer carry the project's branding. The source code is MIT licensed, but that license does not give anyone permission to present a modified or unofficial build as the official CV Studio using its name or logo. No registered trademark is claimed.
 
 ## Build tooling note
 
