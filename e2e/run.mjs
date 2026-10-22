@@ -1776,18 +1776,23 @@ await scenario('49. Vaardighedenlayout: rechthoekige groepen zonder geleidelijn,
     const body = g[0].querySelector('.group-body'); const head = g[0].querySelector('.group-head');
     const hb = r(head), bb = r(body.querySelector('.combo'));
     const actions = g[0].querySelector('.group-actions'); const ab = r(actions.lastElementChild);
+    const actionGap = Math.round(r(actions.firstElementChild).left - r(head.querySelector('.combo')).right);
+    const bodyLeft = Math.round(bb.left); const chipsLeft = Math.round(r(body.querySelector('.pills') ?? body.querySelector('.combo')).left);
     const lab = root.querySelector('.field.row .field-label'); const seg = root.querySelector('.field.row .seg');
     return {
       n: g.length, guide: parseFloat(getComputedStyle(body).borderLeftWidth), top: g.map((e) => parseFloat(getComputedStyle(e).borderTopWidth)),
       indent: bb.left - hb.left, rightHead: Math.round(hb.right), rightInput: Math.round(bb.right), actionsRight: Math.round(ab.right),
-      headH: r(head.querySelector('.combo')).height, inputH: bb.height,
+      actionGap, bodyLeft, chipsLeft, headH: r(head.querySelector('.combo')).height, inputH: bb.height,
       labelLeftOfControl: r(lab).right <= r(seg).left && Math.abs((r(lab).top + r(lab).height / 2) - (r(seg).top + r(seg).height / 2)) < 4
     };
   });
   assert(geo.guide === 0, 'verticale geleidelijn aanwezig');
   assert(geo.top.every((w) => w === 1), 'horizontale scheiding tussen groepen ontbreekt: ' + JSON.stringify(geo.top));
-  assert(geo.indent >= 24, 'te weinig inspringing: ' + geo.indent);
-  assert(Math.abs(geo.rightHead - geo.rightInput) <= 1 && geo.actionsRight <= geo.rightHead && geo.actionsRight >= geo.rightHead - 12, `rechterrand kop/invoer/acties: ${JSON.stringify(geo)}`);
+  assert(geo.indent >= 40, 'te weinig inspringing: ' + geo.indent);
+  assert(geo.rightHead - geo.rightInput >= 40, `invoer niet duidelijk smaller dan de kop: ${JSON.stringify(geo)}`);
+  assert(geo.actionsRight <= geo.rightHead && geo.actionsRight >= geo.rightHead - 12, `acties niet uiterst rechts: ${JSON.stringify(geo)}`);
+  assert(geo.actionGap >= 14 && geo.actionGap <= 40, `ruimte tussen veld en acties: ${geo.actionGap}`);
+  assert(geo.chipsLeft === geo.bodyLeft, 'chips sluiten niet aan op het invoergebied');
   assert(geo.headH > geo.inputH, 'groepskop niet duidelijker dan de ingesprongen invoer');
   assert(geo.labelLeftOfControl, 'label staat niet links van de bediening');
   // bekende groep: geen categoriebalk, direct gefilterde lijst; onbekende groep houdt de balk

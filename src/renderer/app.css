@@ -437,17 +437,18 @@ html.print-mode .cv-page { overflow: hidden; }
 /* categorie met vaardigheden: een rechthoekige eenheid (kop, ingesprongen invoer, chips), gescheiden door horizontale lijnen */
 .groups { display: flex; flex-direction: column; max-width: 520px; border-bottom: 1px solid var(--divider); }
 .group { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4) 0; border-top: 1px solid var(--divider); }
-.group-head { display: flex; align-items: center; gap: var(--s-2); }
+.group-head { display: flex; align-items: center; gap: var(--s-4); }
 .group-name { flex: 1 1 auto; min-width: 0; }
 .group-name .combo, .group-name .input { height: 38px; }
 .group-name .combo-input, .group-name .input { font-weight: 600; font-size: 13.5px; }
 .dots-num { width: 150px; flex: none; }
-.group-actions { display: flex; align-items: center; flex: none; margin-left: auto; }
+.group-actions { display: flex; align-items: center; flex: none; margin-left: auto; gap: 2px; }
 .group-actions .btn { color: var(--faint); }
 .group-actions .btn:hover:not(:disabled) { color: var(--text); }
 .group-actions [data-testid$='-remove']:hover { color: var(--danger); }
-.group-body { display: flex; flex-direction: column; gap: var(--s-2); margin-left: var(--s-6); max-width: none; }
+.group-body { display: flex; flex-direction: column; gap: var(--s-2); margin-left: 48px; max-width: 340px; }
 .group-body .combo { height: 30px; font-size: 12.5px; }
+.group-body .pills { max-width: 100%; }
 .group-body.flat { margin-left: 0; max-width: 520px; }
 .groups + .btn-row, .groups ~ .btn-row { padding-top: var(--s-2); }
 .skill-input { display: flex; flex-direction: column; gap: 6px; }
