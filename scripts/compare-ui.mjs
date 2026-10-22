@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const [oldRoot, newRoot, out] = process.argv.slice(2).map((p) => path.resolve(p));
+const [oldRoot, newRoot, out] = process.argv.slice(2, 5).map((p) => path.resolve(p));
+const [oldLabel = 'oud', newLabel = 'nieuw'] = process.argv.slice(5); // 'oud' = 3.0.1 zonder titelbalk
 fs.mkdirSync(out, { recursive: true });
 
 const cv = {
@@ -58,13 +59,14 @@ async function run(root, label) {
   const handle = card.getByTestId('sec-skills-expand');
   await handle.scrollIntoViewIfNeeded();
   await page.waitForTimeout(150);
-  await page.screenshot({ path: path.join(out, `${label}.png`), clip: { x: 0, y: 44 * (label === 'nieuw' ? 1 : 0), width: 722, height: 1000 - 44 * (label === 'nieuw' ? 1 : 0) } });
+  await page.screenshot({ path: path.join(out, `${label}.png`), clip: { x: 0, y: 44 * (label === 'oud' ? 0 : 1), width: 722, height: 1000 - 44 * (label === 'oud' ? 0 : 1) } });
   await app.close();
   fs.rmSync(ud, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
   return { ...stats, limeBackgroundsInEditor: limeBtns };
 }
 
-const before = await run(oldRoot, 'oud');
-const after = await run(newRoot, 'nieuw');
-console.log(JSON.stringify({ '3.0.1': before, '3.1.0': after }, null, 2));
-fs.writeFileSync(path.join(out, 'metrics.json'), JSON.stringify({ '3.0.1': before, '3.1.0': after }, null, 2));
+const before = await run(oldRoot, oldLabel);
+const after = await run(newRoot, newLabel);
+const result = { [oldLabel]: before, [newLabel]: after };
+console.log(JSON.stringify(result, null, 2));
+fs.writeFileSync(path.join(out, 'metrics.json'), JSON.stringify(result, null, 2));

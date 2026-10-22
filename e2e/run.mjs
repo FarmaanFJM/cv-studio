@@ -55,6 +55,19 @@ const moveTo = async (page, type, zone) => {
   await page.getByTestId(`sec-${type}-menu`).click();
   await page.getByTestId(`sec-${type}-move-${zone}`).click();
 };
+// acties van het cv-menu (⋯ in de titelbalk) en de aangepaste cv-keuzelijst
+const menuAction = async (pg, id) => { await pg.getByTestId('cv-menu').click(); await pg.getByTestId(id).click(); };
+const cvOptions = async (pg) => {
+  await pg.getByTestId('version-select').click();
+  const names = (await pg.locator('[data-testid^="version-select-opt-"]').allInnerTexts()).map((t) => t.trim());
+  await pg.keyboard.press('Escape');
+  return names;
+};
+const pickCv = async (pg, label) => {
+  await pg.getByTestId('version-select').click();
+  await pg.locator('[data-testid^="version-select-opt-"]', { hasText: label }).first().click();
+};
+const activeCv = (pg) => pg.getByTestId('version-select-value').innerText();
 const open = async (page, type) => {
   const card = page.locator(`[data-testid="sec-${type}"]`);
   if (!(await card.locator('.card-body').count())) await card.getByTestId(`sec-${type}-expand`).click();
@@ -202,16 +215,16 @@ await scenario('6. Wisselen tussen templates zonder gegevensverlies', async () =
 });
 
 await scenario('7. Cv dupliceren en apart bewerken', async () => {
-  await page.getByTestId('cv-duplicate').click();
+  await menuAction(page, 'cv-duplicate');
   await page.getByTestId('prompt-input').fill('ING');
   await page.getByTestId('prompt-ok').click();
-  const names = await page.$$eval('[data-testid="version-select"] option', (o) => o.map((x) => x.textContent));
+  const names = await cvOptions(page);
   assert(names.length === 2 && names.includes('ING'), 'kopie ontbreekt: ' + names);
   const personal = await open(page, 'personal');
   await personal.getByTestId('p-title').fill('Stagiair bij ING');
   assert((await page.locator('.cv-page').innerText()).includes('Stagiair bij ING'), 'wijziging niet in kopie');
   await saved(page);
-  await page.getByTestId('version-select').selectOption({ label: 'Mijn cv' });
+  await pickCv(page, 'Mijn cv');
   const t = await page.locator('.cv-page').innerText();
   assert(t.includes('Stagiair Software Engineer') && !t.includes('Stagiair bij ING'), 'origineel is overschreven');
 });
@@ -249,7 +262,7 @@ await scenario('8b. PDF in Minimal-template ook één pagina', async () => {
 });
 
 await scenario('9. Te veel tekst: duidelijke melding, export geblokkeerd, niets verborgen', async () => {
-  await page.getByTestId('version-select').selectOption({ label: 'ING' });
+  await pickCv(page, 'ING');
   const exp = await open(page, 'experience');
   for (let i = 0; i < 4; i++) {
     await exp.getByTestId('exp-add').click();
@@ -283,24 +296,25 @@ async function currentCv(page) {
 }
 
 await scenario('10. JSON export/import en robuustheid bij ongeldige bestanden', async () => {
-  await page.getByTestId('json-export').click();
+  await menuAction(page, 'json-export');
   await page.waitForSelector('[data-testid="toast"]');
   assert(fs.existsSync(path.join(out, 'ING.json')), 'json-export ontbreekt');
   await app.close();
   fs.writeFileSync(path.join(out, 'kapot.json'), '{ dit is geen json');
   ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'kapot.json') }));
-  await page.getByTestId('json-import').click();
+  await menuAction(page, 'json-import');
   await page.waitForSelector('[data-testid="toast"].error');
   await app.close();
   fs.writeFileSync(path.join(out, 'raar.json'), JSON.stringify({ cv: { name: 'Raar', template: 'x', style: { fontSize: 999, accent: 'rood' }, sections: [{ type: 'projects', items: 'nee' }, 5, null], photo: { src: 'javascript:alert(1)' } } }));
   ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'raar.json') }));
-  await page.getByTestId('json-import').click();
-  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="version-select"] option')].some((o) => /Raar/.test(o.textContent)));
+  await menuAction(page, 'json-import');
+  await page.waitForFunction(() => /Raar/.test(document.querySelector('[data-testid="version-select-value"]')?.textContent ?? ''));
   assert(await page.locator('.cv-page').count() === 1, 'app crasht op vreemde import');
   await app.close();
   ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'ING.json') }));
-  await page.getByTestId('json-import').click();
-  await page.waitForFunction(() => document.querySelectorAll('[data-testid="version-select"] option').length >= 4);
+  await menuAction(page, 'json-import');
+  await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select-value"]')?.textContent ?? ''));
+  assert((await cvOptions(page)).length >= 4, 'import voegt geen versie toe');
   const t = await page.locator('.cv-page').innerText();
   assert(t.includes('Test Gebruiker'), 'import mist data');
 });
@@ -328,8 +342,8 @@ await scenario('13. Gevuld (fictief) voorbeeld exporteert in alle templates naar
   fs.writeFileSync(path.join(out, 'demo.json'), JSON.stringify(cv));
   await app.close();
   ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'demo.json') }));
-  await page.getByTestId('json-import').click();
-  await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select"]').selectedOptions[0].textContent));
+  await menuAction(page, 'json-import');
+  await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select-value"]')?.textContent ?? ''));
   for (const [tpl, label] of [['sidebar', 'sidebar'], ['header', 'header'], ['minimal', 'minimal']]) {
     await page.getByTestId('tab-layout').click();
     await page.getByTestId(`tpl-${tpl}`).click();
@@ -494,8 +508,8 @@ await scenario('20. Migratie van v1-opslag (oude cv\'s blijven werken)', async (
 await scenario('21. Zijbalk-variant: naam in zijbalk, datums links, titel+lijn, chips, thema', async () => {
   await app.close();
   ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'demo.json') }));
-  await page.getByTestId('json-import').click();
-  await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select"]').selectedOptions[0].textContent));
+  await menuAction(page, 'json-import');
+  await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select-value"]')?.textContent ?? ''));
   await page.getByTestId('tab-layout').click();
   await page.getByTestId('tpl-sidebar').click();
   await page.locator('label.toggle', { hasText: 'Naam bij foto' }).click();
@@ -768,10 +782,10 @@ await scenario('28. Toetsenbord: tabs, segmented, getal, slider, accordion, menu
   assert(await page.getByTestId('more-type').getAttribute('aria-expanded') === 'true', 'accordion opent niet met Enter');
   await page.getByTestId('more-type').click();
   // tooltip op focus, met toegankelijke naam
-  await page.getByTestId('cv-duplicate').focus();
+  await page.getByTestId('cv-menu').focus();
   await page.waitForSelector('[role="tooltip"]');
-  assert((await page.locator('[role="tooltip"]').innerText()) === 'Dupliceren', 'tooltip-tekst');
-  assert(await page.getByTestId('cv-duplicate').getAttribute('aria-label') === 'Dupliceren', 'icoonknop zonder toegankelijke naam');
+  assert((await page.locator('[role="tooltip"]').innerText()) === 'Meer acties', 'tooltip-tekst');
+  assert(await page.getByTestId('cv-menu').getAttribute('aria-label') === 'Meer acties', 'icoonknop zonder toegankelijke naam');
   await page.keyboard.press('Escape');
   assert(await page.locator('[role="tooltip"]').count() === 0, 'Escape sluit tooltip niet');
   // menu: pijltjes + Escape, focus terug
@@ -943,10 +957,10 @@ await scenario('35. Migratie van v2-opslag (oude tech-instellingen) behoudt het 
 
 // ================= v3.1.0: slepen, vaardigheden, titelbalk, updates =================
 const newCv = async (name) => {
-  await page.getByTestId('cv-new').click();
+  await menuAction(page, 'cv-new');
   await page.getByTestId('prompt-input').fill(name);
   await page.getByTestId('prompt-ok').click();
-  await page.waitForFunction((n) => document.querySelector('[data-testid="titlebar-doc"]')?.textContent === n, name);
+  await page.waitForFunction((n) => document.querySelector('[data-testid="version-select-value"]')?.textContent === n, name);
   await page.getByTestId('tab-sections').click();
 };
 const collapseAll = async () => {
@@ -1232,13 +1246,13 @@ await scenario('39. Titelbalk: structuur, sleepgebieden, beveiligde instellingen
   const box = await tb.boundingBox();
   assert(box.height >= 43 && box.height <= 48, 'titelbalkhoogte ' + box.height);
   const css = await tb.evaluate((e) => { const c = getComputedStyle(e); return { bg: c.backgroundColor, drag: c.getPropertyValue('-webkit-app-region'), bb: c.borderBottomWidth }; });
-  assert(css.bg === 'rgb(20, 22, 24)' && css.bb === '1px', 'titelbalk-opmaak ' + JSON.stringify(css));
+  assert(css.bg === 'rgb(21, 25, 25)' && css.bb === '1px', 'titelbalk-opmaak ' + JSON.stringify(css));
   assert(css.drag === 'drag', 'titelbalk niet sleepbaar: ' + css.drag);
   assert(await page.getByTestId('titlebar-logo').evaluate((i) => i.complete && i.naturalWidth > 0), 'logo niet geladen');
   assert((await tb.innerText()).includes('CV Studio'), 'naam ontbreekt');
-  assert((await page.getByTestId('titlebar-doc').innerText()) === 'Sleeptest', 'cv-naam niet in titelbalk');
+  assert((await activeCv(page)) === 'Sleeptest', 'cv-naam niet in titelbalk');
   assert(await page.evaluate(() => document.title) === 'Sleeptest - CV Studio', 'documenttitel');
-  const noDrag = await page.getByTestId('about-open').evaluate((e) => getComputedStyle(e).getPropertyValue('-webkit-app-region'));
+  const noDrag = await page.getByTestId('cv-menu').evaluate((e) => getComputedStyle(e).getPropertyValue('-webkit-app-region'));
   assert(noDrag === 'no-drag', 'knop in titelbalk is sleepbaar: ' + noDrag);
   // geen sleepgebied buiten de titelbalk: knoppen, tabs, velden en de splitter kunnen het venster nooit verslepen
   const dragEls = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => getComputedStyle(e).getPropertyValue('-webkit-app-region') === 'drag' && !e.closest('[data-testid="titlebar"]')).length);
@@ -1246,7 +1260,7 @@ await scenario('39. Titelbalk: structuur, sleepgebieden, beveiligde instellingen
   const interactiveInDrag = await page.evaluate(() => [...document.querySelectorAll('[data-testid="titlebar"] button, [data-testid="titlebar"] input, [data-testid="titlebar"] select')].filter((e) => getComputedStyle(e).getPropertyValue('-webkit-app-region') !== 'no-drag').length);
   assert(interactiveInDrag === 0, 'interactief element in sleepgebied');
   // hernoemen werkt door in titelbalk en venstertitel
-  await page.getByTestId('cv-rename').click();
+  await menuAction(page, 'cv-rename');
   await page.getByTestId('prompt-input').fill('Hernoemd cv');
   await page.getByTestId('prompt-ok').click();
   await page.waitForFunction(() => document.title === 'Hernoemd cv - CV Studio');
@@ -1326,12 +1340,12 @@ await scenario('40. Venster: minimaliseren, maximaliseren, herstellen, slepen, d
     assert(!(await st()).max, 'dubbelklik herstelt niet');
     // beginnen te slepen op een knop in de titelbalk verplaatst het venster niet
     b = (await st()).b;
-    const btn = await p2.getByTestId('about-open').boundingBox();
+    const btn = await p2.getByTestId('cv-menu').boundingBox();
     xd('mousemove', b.x + btn.x + 8, b.y + btn.y + 8); xd('mousedown', 1); xd('mousemove', b.x + btn.x + 70, b.y + btn.y + 70); await wait(150); xd('mouseup', 1); await wait(300);
     const after = (await st()).b;
     assert(after.x === b.x && after.y === b.y, 'knop in de titelbalk sleept het venster');
     // een wijziging maken en afsluiten: het venster sluit netjes en de gegevens zijn opgeslagen
-    await p2.getByTestId('cv-rename').click();
+    await menuAction(p2, 'cv-rename');
     await p2.getByTestId('prompt-input').fill('Sluittest');
     await p2.getByTestId('prompt-ok').click();
     await p2.waitForFunction(() => document.querySelector('[data-testid="save-status"]')?.textContent === 'Alles opgeslagen');
@@ -1387,9 +1401,13 @@ const relaunch = async (env, settings) => {
   if (settings === null) fs.rmSync(settingsFile, { force: true }); else fs.writeFileSync(settingsFile, JSON.stringify(settings));
   ({ app, page } = await launch(env));
 };
-const about = async () => { await page.getByTestId('about-open').click(); await page.getByTestId('about-dialog').waitFor(); };
+const about = async () => { await menuAction(page, 'about-open'); await page.getByTestId('about-dialog').waitFor(); };
 const closeAbout = async () => { await page.getByTestId('about-close').click(); };
-const checkNow = async () => { await page.getByTestId('upd-check').click(); await page.waitForFunction(() => document.querySelector('[data-testid="upd-result"]')?.textContent !== 'Controleren…'); };
+const checkNow = async () => {
+  await page.getByTestId('upd-check').click();
+  await page.waitForTimeout(400); // de controle start via IPC; zonder dit zou nog de vorige uitkomst gelezen worden
+  await page.waitForFunction(() => document.querySelector('[data-testid="upd-result"]')?.textContent !== 'Controleren…');
+};
 const result = () => page.getByTestId('upd-result').innerText();
 
 await scenario('41. Updates: nieuwste versie, oudere en pre-release worden genegeerd, versievergelijking', async () => {
@@ -1540,6 +1558,88 @@ await scenario('44. Updates: offline, ontbrekende release en snelheidslimiet gev
     await closeAbout();
   } finally { f2.close(); }
   await relaunch({}, { autoCheckUpdates: true, lastUpdateCheck: null, lastUpdateResult: null });
+});
+
+await scenario('46. Redesign: rustige werkbalk, eigen keuzelijst, smaragdpalet, weinig kaders, zichtbare focus', async () => {
+  // werkbalk: één hoofdactie en één menu; geen rij met losse pictogramknoppen meer
+  const bar = page.getByTestId('titlebar');
+  assert(await page.locator('.version-bar, .editor-top').count() === 0, 'de oude rij met pictogramknoppen bestaat nog');
+  const visibleButtons = await bar.locator('.tb-actions button').count();
+  assert(visibleButtons === 2, `werkbalk toont ${visibleButtons} knoppen rechts; verwacht Exporteer PDF en het menu`);
+  assert((await page.getByTestId('export-pdf').innerText()).trim() === 'Exporteer PDF', 'hoofdactie');
+  assert(await page.locator('.preview-top [data-testid="export-pdf"]').count() === 0, 'exportknop staat dubbel');
+  assert(await page.locator('.editor-scroll').evaluate((e) => e.parentElement.querySelectorAll(':scope > button').length) === 0, 'losse knoppen boven de tabs');
+  await page.getByTestId('cv-menu').click();
+  const items = (await page.locator('.menu-pop [role="menuitem"]').allInnerTexts()).map((t) => t.trim());
+  for (const l of ['Nieuw cv…', 'Dupliceren…', 'Hernoemen…', 'JSON importeren…', 'JSON exporteren…', 'Over CV Studio en updates', 'Cv verwijderen…']) assert(items.some((t) => t.startsWith(l)), `menu mist ${l}: ${items.join(' | ')}`);
+  assert(await page.locator('.menu-pop [role="separator"]').count() >= 2, 'menu zonder scheidingen');
+  await page.keyboard.press('Escape');
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'cv-menu', 'focus keert niet terug naar het menu-knopje');
+
+  // eigen keuzelijst: geen standaard <select>, volledige toetsenbordbediening
+  assert(await page.locator('select').count() === 0, 'er is nog een standaard <select>');
+  const trig = page.getByTestId('version-select');
+  assert(await trig.getAttribute('role') === 'combobox' && await trig.getAttribute('aria-haspopup') === 'listbox', 'selectrol');
+  await trig.focus();
+  await page.keyboard.press('Enter');
+  assert(await trig.getAttribute('aria-expanded') === 'true', 'Enter opent de lijst niet');
+  const optCount = await page.locator('[role="option"]').count();
+  assert(optCount >= 2, 'lijst mist opties en actie');
+  await page.keyboard.press('End');
+  assert((await page.locator('[role="option"][id]').last().getAttribute('id')) === await trig.getAttribute('aria-activedescendant'), 'End gaat niet naar het laatste item');
+  assert(/Nieuw cv/.test(await page.locator('[role="option"]').last().innerText()), 'actie "Nieuw cv" ontbreekt onderaan');
+  await page.keyboard.press('Home');
+  const first = await trig.getAttribute('aria-activedescendant');
+  await page.keyboard.press('ArrowDown');
+  assert(await trig.getAttribute('aria-activedescendant') !== first, 'pijltje omlaag verplaatst niets');
+  await page.keyboard.press('Escape');
+  assert(await trig.getAttribute('aria-expanded') === 'false' && await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'version-select', 'Escape sluit niet of focus kwijt');
+  // kiezen met toetsenbord en typen om te zoeken
+  await trig.click();
+  await page.locator('[data-testid^="version-select-opt-"]').first().click();
+  const before = await activeCv(page);
+  await trig.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.type('S'); await page.keyboard.press('Enter');
+  assert((await activeCv(page)).startsWith('S') || (await activeCv(page)) === before, 'zoeken door typen in de lijst');
+  // "Nieuw cv" in de lijst opent dezelfde naamvraag
+  await trig.click();
+  await page.getByTestId('version-select-action-new').click();
+  await page.getByTestId('prompt-input').fill('Uit de lijst');
+  await page.getByTestId('prompt-ok').click();
+  await page.waitForFunction(() => document.querySelector('[data-testid="version-select-value"]')?.textContent === 'Uit de lijst');
+
+  // palet: smaragd als accent, geen lime meer, rustige achtergrond
+  const tok = await page.evaluate(() => { const c = getComputedStyle(document.documentElement); return { accent: c.getPropertyValue('--accent').trim(), bg: c.getPropertyValue('--bg').trim(), surface: c.getPropertyValue('--surface').trim(), body: getComputedStyle(document.body).backgroundColor, btn: getComputedStyle(document.querySelector('[data-testid="export-pdf"]')).backgroundColor }; });
+  assert(tok.accent === '#00674f' && tok.bg === '#0e1111' && tok.surface === '#151919', 'ontwerptokens: ' + JSON.stringify(tok));
+  assert(tok.body === 'rgb(14, 17, 17)' && tok.btn === 'rgb(0, 103, 79)', 'toegepaste kleuren: ' + JSON.stringify(tok));
+  await collapseAll();
+  const sk = await open(page, 'skills');
+  if (!(await sk.getByTestId('skill-0').count())) await sk.getByTestId('skill-add').click();
+  const lime = await page.evaluate(() => {
+    const isLime = (v) => /rgb\((1[6-9]\d|2\d\d), (2[2-5]\d), (\d{1,2}|[1-6]\d)\)/.test(v) && !/rgb\((0|1\d?), /.test(v);
+    return [...document.querySelectorAll('.shell *, .popover *')].filter((e) => { const c = getComputedStyle(e); return isLime(c.backgroundColor) || isLime(c.color) || (parseFloat(c.borderTopWidth) > 0 && isLime(c.borderTopColor)); }).length;
+  });
+  assert(lime === 0, `${lime} elementen hebben nog een limegroene kleur`);
+  // weinig kaders: ingeklapte onderdelen hebben geen omlijning; in een uitgeklapt onderdeel hoogstens een scheidingslijn
+  const rows = await page.locator('.card').evaluateAll((els) => els.filter((e) => ['Top', 'Right', 'Bottom', 'Left'].some((x) => parseFloat(getComputedStyle(e)[`border${x}Width`]) > 0)).length);
+  assert(rows === 0, `${rows} onderdeelrijen hebben nog een rand`);
+  // een 'kader' is een omlijning rond een vlak (twee of meer zijden); een scheidingslijn (één zijde) telt apart
+  const nest = await sk.evaluate((root) => {
+    const sides = (e) => { const c = getComputedStyle(e); return ['Top', 'Right', 'Bottom', 'Left'].filter((x) => parseFloat(c[`border${x}Width`]) > 0 && c[`border${x}Style`] !== 'none').length; };
+    const all = [root, ...root.querySelectorAll('div, section, fieldset')];
+    const outlines = all.filter((e) => sides(e) >= 2);
+    const dividers = all.filter((e) => sides(e) === 1).length;
+    const depth = (e) => { let d = 0; for (let n = e; n && n !== root.parentElement; n = n.parentElement) if (outlines.includes(n)) d++; return d; };
+    return { outlines: outlines.length, dividers, depth: Math.max(0, ...outlines.map(depth)) };
+  });
+  assert(nest.outlines === 0, `omlijnde vlakken in Vaardigheden: ${nest.outlines} (diepte ${nest.depth})`);
+  console.log(`     (Vaardigheden uitgeklapt: ${nest.outlines} omlijnde vlakken, ${nest.dividers} scheidingslijnen)`);
+  // zichtbare focus: toetsenbordfocus geeft een duidelijke smaragdrand
+  await page.getByTestId('tab-layout').focus();
+  await page.keyboard.press('Tab');
+  const ring = await page.evaluate(() => { const cs = getComputedStyle(document.activeElement); return { w: parseFloat(cs.outlineWidth), st: cs.outlineStyle, col: cs.outlineColor }; });
+  assert(ring.st === 'solid' && ring.w >= 2 && ring.col === 'rgb(61, 190, 156)', 'focusring: ' + JSON.stringify(ring));
+  await page.getByTestId('tab-sections').click();
+  await page.screenshot({ path: path.join(out, 'redesign.png') });
 });
 
 await scenario('45. Toegankelijkheid (axe-core) van lijst, titelbalk, About en updatemelding', async () => {

@@ -92,6 +92,10 @@ export interface MenuItem {
   key: string; label: string; onSelect: () => void; danger?: boolean; disabled?: boolean; testid?: string;
   /** Niet-klikbaar kopje boven de volgende items (bijv. "Verplaatsen naar"). */
   heading?: boolean;
+  /** Dunne scheidingslijn tussen groepen acties. */
+  separator?: boolean;
+  /** Korte toelichting rechts (bijv. "Update beschikbaar"). */
+  hint?: string;
   /** Huidige keuze: getoond met vinkje en niet te kiezen. */
   current?: boolean;
   ariaLabel?: string;
@@ -124,13 +128,15 @@ export function SummaMenu({ label, items, name }: { label: string; items: MenuIt
       </SummaButton>
       {open && (
         <div className="popover menu-pop" role="menu" id={mid} aria-label={label}>
-          {items.map((it) => it.heading ? (
+          {items.map((it) => it.separator ? (
+            <div key={it.key} className="menu-sep" role="separator" />
+          ) : it.heading ? (
             <div key={it.key} className="pop-title" role="presentation">{it.label}</div>
           ) : (
             <button type="button" role="menuitem" key={it.key} data-testid={it.testid} disabled={it.disabled || it.current} aria-label={it.ariaLabel}
               aria-current={it.current ? 'true' : undefined} className={`${it.danger ? 'danger' : ''} ${it.current ? 'current' : ''}`}
               onClick={(e) => { e.stopPropagation(); setOpen(false); it.onSelect(); }}>
-              {it.label}{it.current && <Icon name="check" size={13} />}
+              <span>{it.label}</span>{it.hint && <small className="menu-hint">{it.hint}</small>}{it.current && <Icon name="check" size={13} />}
             </button>
           ))}
         </div>

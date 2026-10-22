@@ -54,8 +54,16 @@ const open = async (type) => { const c = page.locator(`[data-testid="sec-${type}
 // 1) hoofdweergave met ingeklapte onderdelen
 await page.waitForTimeout(600);
 await shot('01-editor-collapsed');
-// 2) titelbalk
+// 2) titelbalk met werkbalk, cv-keuze en menu
 await shot('02-titlebar', { clip: { x: 0, y: 0, width: 1500, height: 60 } });
+await page.getByTestId('version-select').click();
+await page.waitForTimeout(150);
+await shot('02b-cv-selector-open', { clip: { x: 0, y: 0, width: 760, height: 220 } });
+await page.keyboard.press('Escape');
+await page.getByTestId('cv-menu').click();
+await page.waitForTimeout(150);
+await shot('02c-toolbar-menu', { clip: { x: 900, y: 0, width: 600, height: 420 } });
+await page.keyboard.press('Escape');
 // 3) vaardigheden uitgeklapt
 const skills = await open('skills');
 await skills.getByTestId('skill-display').getByText('Chips').click().catch(() => {});
@@ -112,6 +120,7 @@ await shot('08-move-menu');
 await page.keyboard.press('Escape');
 
 // 9) update-instellingen en melding
+await page.getByTestId('cv-menu').click();
 await page.getByTestId('about-open').click();
 await page.getByTestId('upd-check').click();
 await page.waitForFunction(() => /beschikbaar/.test(document.querySelector('[data-testid="upd-result"]')?.textContent ?? ''));

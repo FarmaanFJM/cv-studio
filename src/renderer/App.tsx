@@ -6,7 +6,7 @@ import { FitReport, MM_PX, PAGE_H_MM, PAGE_W_MM, measurePage } from './layout';
 import { CvPage } from './templates/CvPage';
 import { SectionList } from './editor/SectionList';
 import { LayoutPanel, StylePanel } from './editor/DesignPanels';
-import { SummaButton, SummaSelect } from './ui';
+import { MenuItem, SummaButton } from './ui';
 import { Icon } from './icons';
 import { TitleBar } from './shell/TitleBar';
 import { AboutDialog, UpdateBanner } from './shell/UpdateUi';
@@ -190,26 +190,30 @@ export function App() {
     if (r.ok) { importCv(r.cv); notify({ kind: 'ok', text: 'Geïmporteerd als nieuwe versie.' }); }
     else if (!r.canceled) notify({ kind: 'error', text: r.error ?? 'Importeren is mislukt.' });
   };
+  const newCv = async () => { const n = await ask('Naam van het nieuwe cv', 'Nieuw cv'); if (n) addCv(n); };
+  const updateDot = updates.status?.state.kind === 'available' || updates.status?.state.kind === 'ready';
+  const menuItems: MenuItem[] = [
+    { key: 'new', label: 'Nieuw cv…', testid: 'cv-new', onSelect: () => { void newCv(); } },
+    { key: 'dup', label: 'Dupliceren…', testid: 'cv-duplicate', onSelect: async () => { const n = await ask('Naam van de kopie', `${cv.name} (kopie)`); if (n) duplicate(n); } },
+    { key: 'ren', label: 'Hernoemen…', testid: 'cv-rename', onSelect: async () => { const n = await ask('Nieuwe naam', cv.name); if (n) updateCv((c) => { c.name = n; }); } },
+    { key: 's1', separator: true, label: '', onSelect: () => undefined },
+    { key: 'imp', label: 'JSON importeren…', testid: 'json-import', onSelect: () => { void importJson(); } },
+    { key: 'exp', label: 'JSON exporteren…', testid: 'json-export', onSelect: () => { void exportJson(); } },
+    { key: 's2', separator: true, label: '', onSelect: () => undefined },
+    { key: 'about', label: 'Over CV Studio en updates', testid: 'about-open', hint: updateDot ? 'Update beschikbaar' : undefined, onSelect: () => setAbout(true) },
+    { key: 's3', separator: true, label: '', onSelect: () => undefined },
+    { key: 'del', label: 'Cv verwijderen…', testid: 'cv-delete', danger: true, disabled: state.cvs.length <= 1,
+      onSelect: () => { if (confirm(`Cv "${cv.name}" verwijderen?`)) removeCv(); } }
+  ];
   const compact = () => updateCv((c) => { Object.assign(c.style, SPACING_PRESETS.compact); c.style.fontSize = Math.min(c.style.fontSize, 9); });
 
   return (
     <div className="shell">
-    <TitleBar cvName={cv.name} version={version} updateDot={updates.status?.state.kind === 'available' || updates.status?.state.kind === 'ready'} onAbout={() => setAbout(true)} />
+    <TitleBar version={version} cvs={state.cvs} activeId={state.activeId} onSelectCv={setActive} onNewCv={newCv}
+      exportDisabled={!fits || busy} exportTitle={fits ? 'Opslaan als PDF' : 'Inhoud past niet op één pagina'} exporting={busy} onExport={exportPdf}
+      menuItems={menuItems} updateDot={updateDot} />
     <div className="app" style={{ gridTemplateColumns: `${editorW}px 6px 1fr` }}>
       <section className="editor">
-        <div className="editor-top">
-          <div className="version-bar" role="toolbar" aria-label="Cv-versies en bestanden">
-            <SummaSelect name="version-select" label="Cv-versie" value={state.activeId} onChange={setActive} options={state.cvs.map((c) => ({ value: c.id, label: c.name }))} />
-            <SummaButton icon name="cv-new" title="Nieuw cv" onClick={async () => { const n = await ask('Naam van het nieuwe cv', 'Nieuw cv'); if (n) addCv(n); }}><Icon name="plus" /></SummaButton>
-            <SummaButton icon name="cv-duplicate" title="Dupliceren" onClick={async () => { const n = await ask('Naam van de kopie', `${cv.name} (kopie)`); if (n) duplicate(n); }}><Icon name="copy" /></SummaButton>
-            <SummaButton icon name="cv-rename" title="Hernoemen" onClick={async () => { const n = await ask('Nieuwe naam', cv.name); if (n) updateCv((c) => { c.name = n; }); }}><Icon name="edit" /></SummaButton>
-            <SummaButton icon kind="danger" name="cv-delete" title="Verwijderen" disabled={state.cvs.length <= 1}
-              onClick={() => { if (confirm(`Cv "${cv.name}" verwijderen?`)) removeCv(); }}><Icon name="trash" /></SummaButton>
-            <span className="vsep" />
-            <SummaButton icon name="json-export" title="Exporteer JSON" onClick={exportJson}><Icon name="download" /></SummaButton>
-            <SummaButton icon name="json-import" title="Importeer JSON" onClick={importJson}><Icon name="upload" /></SummaButton>
-          </div>
-        </div>
         <div className="tabbar">
         <div className="tabs" role="tablist" aria-label="Instellingen"
           onKeyDown={(e) => {
@@ -252,10 +256,6 @@ export function App() {
             </SummaButton>
             <SummaButton small kind="ghost" icon title="Inzoomen" name="zoom-in" onClick={() => zoomBy(1.15)}><Icon name="zoomin" size={16} /></SummaButton>
           </div>
-          <button type="button" className="btn primary big" data-testid="export-pdf" disabled={!fits || busy}
-            title={fits ? 'Opslaan als PDF' : 'Inhoud past niet op één pagina'} onClick={exportPdf}>
-            <Icon name="pdf" /> {busy ? 'Bezig…' : 'Exporteer PDF'}
-          </button>
         </div>
         {!fits && fit && (
           <div className="overflow-banner" role="alert" data-testid="overflow-banner">

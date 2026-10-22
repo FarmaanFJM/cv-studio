@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Genereert alle merkbestanden van CV Studio uit assets/brand/cv-studio-logo-source.png.
 
-De aangeleverde afbeelding is ondoorzichtig (neon-groen CV-symbool op een bijna zwarte achtergrond). Het symbool wordt
+De aangeleverde afbeelding is ondoorzichtig (smaragdgroen CV-symbool op een bijna zwarte achtergrond). Het symbool wordt
 daarom niet "zwart-naar-transparant" gemaakt (dat zou de donkergroene plooien doorzichtig maken), maar als vorm
 uitgesneden:
   1. masker op basis van groenverzadiging, gaten gevuld via een flood-fill vanaf de rand;
@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / 'assets/brand/cv-studio-logo-source.png'
 BRAND = ROOT / 'assets/brand'
 BUILD = ROOT / 'build'
-TILE = (20, 22, 24)  # #141618, Summa 'surface'
+TILE = (21, 25, 25)  # #151919, Summa surface
 
 src = Image.open(SRC).convert('RGB')
 rgb = np.asarray(src).astype(np.float32)

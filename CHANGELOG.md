@@ -4,10 +4,18 @@
 This is a feature and UX release. The data format is unchanged (still v4). Existing CVs open exactly as before, with the changes listed under "Compatibility".
 
 **Simpler editor**
-- One border per section. Groups and settings inside a section are separated by whitespace and a thin divider, not by nested cards or colored panels. The segmented controls and switches use a neutral selected state; the accent color is kept for focus, the primary action and drop targets.
+- Sections are quiet rows without outlines. Groups and settings inside a section are separated by whitespace and a thin divider, not by nested cards or colored panels.
 - The `Hoofd | Aanvullend` buttons are gone. Move sections between *Hoofdinhoud*, *Aanvullende inhoud* and *Verborgen* by dragging: an insertion line shows where the section lands, the destination category is highlighted, the editor scrolls automatically near its edges, and dropping never expands a section. Empty categories accept drops.
 - Keyboard and menu alternative: `... > Verplaatsen naar` (with a check mark on the current place) plus the existing Up/Down menu items and arrow-key reordering on the drag handle. Focus returns to the handle after moving.
 - Template rules are respected. In the Header template the contact block has a fixed place and cannot be dragged. In Minimal, reordering keeps every section's stored zone, so switching templates never loses placement.
+
+**Visual redesign (calmer, emerald)**
+- New SummaUI tokens: background `#0E1111`, surface `#151919`, elevated `#1B2020`, soft `#202626`, border `#2A3131`, text `#F3F5F4` / `#A7B0AE` / `#8A9391`, accent `#00674F` (hover `#0A7A60`, pressed `#0A5B47`, soft `rgba(0,103,79,0.14)`, ring `rgba(0,103,79,0.35)`). `#00674F` is used for fills with white text (6.5:1). Text, icons, indicators and the keyboard focus ring use a lighter emerald `#3DBE9C` because `#00674F` alone has only about 2.9:1 on the dark surfaces. The lime accent is gone.
+- Far fewer borders: rows, panels, segmented controls, accordions and groups have no outline; hierarchy comes from layered surfaces, spacing, type and hairline dividers. Inputs keep one subtle border. In an expanded Skills section the number of outlined panels went from 7 bordered containers (first 3.1.0 build) to 0 outlines and 2 divider lines, and from 11 (3.0.1) to the same.
+- One compact toolbar in the title bar: logo, name, version and a custom CV switcher on the left; one primary **Exporteer PDF** action and one `...` menu on the right. The row of eight icon buttons above the tabs is gone. The menu holds Nieuw cv, Dupliceren, Hernoemen, JSON importeren and exporteren, Over CV Studio en updates, and Cv verwijderen. The menu button shows a small dot when an update is available.
+- Custom CV switcher (replaces the native dropdown): styled popover with the current CV, a check mark, and *Nieuw cv* as an action at the bottom. Full keyboard support (Enter, Space or arrows to open, arrows, Home, End, type to search, Enter to choose, Escape to close with focus returned).
+- Shared components were aligned: one control height (34 px, 28 px small), radii (8 and 12 px), hover and focus behavior, popover elevation, segmented control, switch, tabs, menus and comboboxes. The size badge on a section row only appears on hover, focus or when the section is too long.
+- New emerald logo, extracted the same way as before (see `assets/brand/README.md`); icon, installer icon, title bar and About dialog use it.
 
 **Skills**
 - Presentation is now **Tekst | Chips**. Organization stays **Lijst | Groepen | Niveaus**.

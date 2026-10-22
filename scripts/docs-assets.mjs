@@ -61,7 +61,7 @@ for (const tpl of ['sidebar', 'header', 'minimal']) {
   const pdf = path.join(tmp, `template-${tpl}.pdf`);
   fs.copyFileSync(path.join(tmp, 'Alex Morgan.pdf'), pdf);
   execFileSync('pdftoppm', ['-r', '110', '-png', '-singlefile', pdf, path.join(tmp, `template-${tpl}`)]);
-  execFileSync('convert', [path.join(tmp, `template-${tpl}.png`), '-resize', '640x', '-strip', '-colors', '192', `PNG8:${path.join(out, `template-${tpl}.png`)}`]);
+  execFileSync('convert', [path.join(tmp, `template-${tpl}.png`), '-resize', '640x', '-strip', '+dither', '-colors', '256', `PNG8:${path.join(out, `template-${tpl}.png`)}`]);
 }
 
 // 2) the main window: sidebar template, content tab with the projects section open
@@ -74,13 +74,13 @@ await toast().click().catch(() => {}); // hide the export message (it shows a lo
 await page.waitForTimeout(2200); // let the highlight in the preview fade out
 await page.mouse.move(5, 5);
 await page.screenshot({ path: path.join(tmp, 'app.png') });
-execFileSync('convert', [path.join(tmp, 'app.png'), '-strip', '-colors', '160', `PNG8:${path.join(out, 'app-editor.png')}`]);
+execFileSync('convert', [path.join(tmp, 'app.png'), '-strip', '+dither', '-colors', '256', `PNG8:${path.join(out, 'app-editor.png')}`]);
 
 // 3) the style tab (colors, typography and technology icon settings)
 await page.getByTestId('tab-style').click();
 await page.mouse.move(5, 5);
 await page.screenshot({ path: path.join(tmp, 'style.png') });
-execFileSync('convert', [path.join(tmp, 'style.png'), '-strip', '-colors', '160', `PNG8:${path.join(out, 'app-style.png')}`]);
+execFileSync('convert', [path.join(tmp, 'style.png'), '-strip', '+dither', '-colors', '256', `PNG8:${path.join(out, 'app-style.png')}`]);
 
 await app.close();
 fs.rmSync(tmp, { recursive: true, force: true });
