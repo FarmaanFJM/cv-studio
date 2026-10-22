@@ -118,7 +118,7 @@ export function SectionEditor({ s, cv, update }: { s: Section; cv: CV; update: U
               </div>
               <div className="field">
                 <span className="field-label">Technologieën</span>
-                <SkillTagInput name={`proj-${i}-tech`} label="Technologieën" placeholder="Typ een technologie of open de lijst"
+                <SkillTagInput name={`proj-${i}-tech`} label="Technologieën" placeholder="Technologie toevoegen"
                   skills={it.tech.split(/[,;|]/).map((t) => t.trim()).filter(Boolean)} onChange={(v) => edit<typeof s>((x) => { x.items[i].tech = v.join(', '); })} />
                 <SkillPills skills={it.tech.split(/[,;|]/).map((t) => t.trim()).filter(Boolean)} show={false} overrides={{}} onOverride={() => undefined}
                   onRemove={(n) => edit<typeof s>((x) => { x.items[i].tech = x.items[i].tech.split(/[,;|]/).map((t) => t.trim()).filter(Boolean).filter((_, k) => k !== n).join(', '); })} />
@@ -187,7 +187,7 @@ function SkillsEditor({ s, cv, edit }: { s: Extract<Section, { type: 'skills' }>
   const levels = s.mode === 'levels';
   return (
     <div className="stack">
-      <div className="inline-controls">
+      <div className="controls-row">
         <SummaFieldset label="Indeling">
           <SummaSegmented name="skill-mode" label="Indeling vaardigheden" value={s.mode} onChange={(m) => edit<typeof s>((x) => {
             x.mode = m;
@@ -199,10 +199,10 @@ function SkillsEditor({ s, cv, edit }: { s: Extract<Section, { type: 'skills' }>
           <SummaSegmented name="skill-display" label="Weergave vaardigheden" value={s.display} onChange={(d) => edit<typeof s>((x) => { x.display = d; })}
             options={[{ value: 'text', label: 'Tekst', title: 'Gewone tekst, nooit iconen' }, { value: 'chips', label: 'Chips', title: 'Compacte chips, met iconen als die aanstaan' }]} />
         </SummaFieldset>
+        {chips && <TechSettingsPanel cv={cv} s={s} edit={edit} />}
       </div>
-      {chips && <TechSettingsPanel cv={cv} s={s} edit={edit} />}
       {s.mode === 'flat' ? (
-        <div className="stack tight">
+        <div className="group-body flat">
           <SkillTagInput name="skill-flat" label="Vaardigheden" skills={flat}
             onChange={(v) => edit<typeof s>((x) => { if (!x.groups.length) x.groups.push(newSkillGroup()); x.groups[0].skills = v; x.groups.slice(1).forEach((g) => { g.skills = []; }); })} />
           <SkillPills skills={flat} show={iconsShown} overrides={s.iconOverrides} onOverride={override}
@@ -212,44 +212,42 @@ function SkillsEditor({ s, cv, edit }: { s: Extract<Section, { type: 'skills' }>
             })} />
         </div>
       ) : (
-        <>
+        <div className="groups">
           {s.groups.map((g, i) => (
-            <div className="subgroup" key={g.id} data-testid={`skill-${i}`}>
-              <div className="subgroup-head">
-                <div className="field grow">
-                  <span className="field-label">{levels ? 'Niveau' : 'Categorie'}</span>
+            <div className="group" key={g.id} data-testid={`skill-${i}`}>
+              <div className="group-head">
+                <div className="group-name">
                   {levels
-                    ? <SummaTextInput name={`skill-${i}-name`} label="Niveau" value={g.name} onChange={(v) => edit<typeof s>((x) => { x.groups[i].name = v; })} />
+                    ? <SummaTextInput name={`skill-${i}-name`} label="Niveau" placeholder="Niveau" value={g.name} onChange={(v) => edit<typeof s>((x) => { x.groups[i].name = v; })} />
                     : <CategoryInput name={`skill-${i}-name`} label="Categorie" value={g.name} autoFocus={focusId === g.id}
                         onChange={(v) => edit<typeof s>((x) => { x.groups[i].name = v; })} />}
                 </div>
-                {levels && <div className="mini-num"><SummaNumberInput label="Stippen" min={0} max={5} value={g.level} name={`skill-${i}-level`} onChange={(v) => edit<typeof s>((x) => { x.groups[i].level = v; })} /></div>}
-                <div className="subgroup-actions">
+                {levels && <div className="dots-num"><SummaNumberInput label="Stippen" min={0} max={5} value={g.level} name={`skill-${i}-level`} onChange={(v) => edit<typeof s>((x) => { x.groups[i].level = v; })} /></div>}
+                <div className="group-actions">
                   <SummaButton small kind="ghost" icon title="Omhoog" name={`skill-${i}-up`} disabled={i === 0} onClick={() => edit<typeof s>((x) => { x.groups = move(x.groups, i, i - 1); })}><Icon name="up" size={14} /></SummaButton>
                   <SummaButton small kind="ghost" icon title="Omlaag" name={`skill-${i}-down`} disabled={i === s.groups.length - 1} onClick={() => edit<typeof s>((x) => { x.groups = move(x.groups, i, i + 1); })}><Icon name="down" size={14} /></SummaButton>
                   <SummaButton small kind="ghost" icon title="Groep verwijderen" name={`skill-${i}-remove`} onClick={() => edit<typeof s>((x) => { x.groups.splice(i, 1); })}><Icon name="trash" size={14} /></SummaButton>
                 </div>
               </div>
-              <div className="field">
-                <span className="field-label">Vaardigheden</span>
+              <div className="group-body">
                 <SkillTagInput name={`skill-${i}-list`} label={`Vaardigheden in ${g.name || 'deze groep'}`} skills={g.skills} category={levels ? null : categoryByName(g.name)}
                   onChange={(v) => edit<typeof s>((x) => { x.groups[i].skills = v; })} />
+                <SkillPills skills={g.skills} show={iconsShown} overrides={s.iconOverrides} onOverride={override}
+                  onRemove={(n) => edit<typeof s>((x) => { x.groups[i].skills.splice(n, 1); })} />
               </div>
-              <SkillPills skills={g.skills} show={iconsShown} overrides={s.iconOverrides} onOverride={override}
-                onRemove={(n) => edit<typeof s>((x) => { x.groups[i].skills.splice(n, 1); })} />
             </div>
           ))}
           <div className="btn-row">
-            <AddBtn name="skill-add" onClick={() => {
+            <SummaButton small kind="ghost" name="skill-add" onClick={() => {
               const g = newSkillGroup('', levels ? 1 : 0);
               edit<typeof s>((x) => { x.groups.push(g); });
               if (!levels) setFocusId(g.id);
-            }}>{levels ? 'Niveau' : 'Groep'}</AddBtn>
+            }}><Icon name="plus" size={14} /> {levels ? 'Niveau' : 'Groep'}</SummaButton>
             {levels && s.groups.length === 0 && (
-              <SummaButton onClick={() => edit<typeof s>((x) => { x.groups = SKILL_LEVEL_NAMES.map((n, i) => newSkillGroup(n, 5 - i)); })}>Standaardniveaus</SummaButton>
+              <SummaButton small kind="ghost" onClick={() => edit<typeof s>((x) => { x.groups = SKILL_LEVEL_NAMES.map((n, i) => newSkillGroup(n, 5 - i)); })}>Standaardniveaus</SummaButton>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

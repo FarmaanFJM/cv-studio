@@ -44,7 +44,7 @@ export function LayoutPanel({ cv, update, onOpenContent }: { cv: CV; update: Upd
           <SummaSegmented name="spacing-preset" label="Voorinstelling ruimte" value={preset as 'compact'} onChange={(k) => update((c) => Object.assign(c.style, SPACING_PRESETS[k]))}
             options={[{ value: 'compact', label: 'Compact' }, { value: 'normal', label: 'Normaal' }, { value: 'ruim', label: 'Ruim' }]} />
         </SummaFieldset>
-        <div className="grid2">
+        <div className="grid-num">
           <SummaNumberInput label="Marge" unit="mm" min={6} max={22} step={0.5} value={st.margin} name="margin" onChange={set('margin')} slider />
           <SummaNumberInput label="Tussen onderdelen" unit="mm" min={2} max={14} step={0.5} value={st.sectionGap} name="sectionGap" onChange={set('sectionGap')} slider />
           <SummaNumberInput label="Tussen items" unit="mm" min={0.5} max={8} step={0.5} value={st.itemGap} name="itemGap" onChange={set('itemGap')} slider />
@@ -57,7 +57,7 @@ export function LayoutPanel({ cv, update, onOpenContent }: { cv: CV; update: Upd
       <Group title="Foto">
         {!cv.photo && <p className="field-hint">Voeg een foto toe onder Inhoud → Persoonlijke gegevens.</p>}
         <SummaToggle name="toggle-photo" label="Toon foto" checked={!!cv.photo?.visible} disabled={!cv.photo} onChange={(v) => update((c) => { if (c.photo) c.photo.visible = v; })} />
-        <div className="grid2">
+        <div className="grid-num">
           <SummaFieldset label="Vorm">
             <SummaSegmented name="photo-shape" label="Vorm van de foto" disabled={!cv.photo} value={cv.photo?.shape ?? 'round'} onChange={(v) => update((c) => { if (c.photo) c.photo.shape = v; })}
               options={[{ value: 'round', label: 'Rond' }, { value: 'square', label: 'Vierkant' }]} />
@@ -110,14 +110,14 @@ export function StylePanel({ cv, update, swatches, onSaveSwatch }: {
               onClick={() => update((c) => { c.style.accent = t.accent; c.style.sidebarBg = t.sidebarBg; })} />
           ))}
         </div>
-        <div className="grid2">
+        <div className="grid-num">
           <SummaColorPicker label="Accent" name="color-accent" value={st.accent} onChange={set('accent')} {...common} />
           <SummaColorPicker label="Vlak" name="color-sidebar" value={st.sidebarBg} onChange={set('sidebarBg')} {...common} />
           <SummaColorPicker label="Koppen" name="color-heading" value={st.headingColor} optional minContrast={3} onChange={set('headingColor')} {...common} />
           <SummaColorPicker label="Tekst" name="color-text" value={st.textColor} optional minContrast={4.5} onChange={set('textColor')} {...common} />
         </div>
         <SummaAccordion title="Meer kleuren" name="more-colors">
-          <div className="grid2"><SummaColorPicker label="Lijnen" name="color-divider" value={st.dividerColor} optional onChange={set('dividerColor')} {...common} /></div>
+          <div className="grid-num"><SummaColorPicker label="Lijnen" name="color-divider" value={st.dividerColor} optional onChange={set('dividerColor')} {...common} /></div>
         </SummaAccordion>
       </Group>
 
@@ -129,21 +129,20 @@ export function StylePanel({ cv, update, swatches, onSaveSwatch }: {
             options={[{ value: 'caps', label: 'KAPITALEN' }, { value: 'title', label: 'Titel + lijn' }, { value: 'plain', label: 'Gewoon' }]} />
         </SummaFieldset>
         <SummaAccordion title="Meer typografie" name="more-type">
-          <div className="grid2"><SummaNumberInput label="Regelafstand" min={1.2} max={1.8} step={0.05} value={st.lineHeight} name="lineHeight" onChange={set('lineHeight')} slider /></div>
+          <div className="grid-num"><SummaNumberInput label="Regelafstand" min={1.2} max={1.8} step={0.05} value={st.lineHeight} name="lineHeight" onChange={set('lineHeight')} slider /></div>
         </SummaAccordion>
       </Group>
 
-      <Group title="Technologie-iconen" name="tech-global">
+      <Group title="Iconen" name="tech-global">
         <SummaToggle name="toggle-tech-icons" label="Toon iconen" checked={st.techIcons} onChange={set('techIcons')}
-          hint="Voor vaardigheden, projecten en links. Onderdelen kunnen dit zelf overschrijven." />
+          hint="Bij vaardigheden, projecten en links" />
         <SummaFieldset label="Kleur">
-          <SummaSegmented name="tech-global-color" label="Kleur van technologie-iconen" value={st.techColorMode} disabled={!st.techIcons} onChange={set('techColorMode')} options={TECH_COLOR_OPTIONS} />
-          {!st.techIcons && <span className="field-hint">Zet “Toon iconen” aan om de kleur te kiezen; je keuze blijft bewaard.</span>}
-        </SummaFieldset>
+          <SummaSegmented name="tech-global-color" label="Kleur van iconen" value={st.techColorMode} disabled={!st.techIcons} onChange={set('techColorMode')} options={TECH_COLOR_OPTIONS} />
+                  </SummaFieldset>
       </Group>
 
       <Group title="Contacticonen" name="contact-icons">
-        <SummaToggle name="toggle-icons" label="Toon contacticonen" checked={st.icons} onChange={set('icons')} hint="E-mail, telefoon, locatie, LinkedIn, GitHub en website" />
+        <SummaToggle name="toggle-icons" label="Toon contacticonen" checked={st.icons} onChange={set('icons')} hint="E-mail, telefoon, locatie en links" />
       </Group>
     </div>
   );

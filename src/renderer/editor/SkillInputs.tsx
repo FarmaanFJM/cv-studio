@@ -14,7 +14,7 @@ const skillOption = (e: SkillEntry, withHint: boolean): ComboOption => {
  * Vaardigheden toevoegen zoals tags op GitHub: typ, kies een suggestie (Tab/Enter/klik) en de invoer is weer leeg voor de volgende.
  * Eigen namen kunnen altijd; duplicaten (hoofdletter- en spatieongevoelig) worden binnen dezelfde lijst genegeerd.
  */
-export function SkillTagInput({ skills, onChange, name, label, category, placeholder = 'Typ een vaardigheid of open de lijst', autoFocus }: {
+export function SkillTagInput({ skills, onChange, name, label, category, placeholder = 'Vaardigheid toevoegen', autoFocus }: {
   skills: string[]; onChange: (v: string[]) => void; name?: string; label: string; category?: SkillCategory | null; placeholder?: string; autoFocus?: boolean;
 }) {
   const [text, setText] = useState('');
@@ -40,7 +40,8 @@ export function SkillTagInput({ skills, onChange, name, label, category, placeho
     if (cleaned) {
       const res = searchSkills(cleaned, { exclude: skills, boost, limit: 30 }).map((e) => skillOption(e, false));
       const known = res.some((o) => skillKey(o.label) === skillKey(cleaned)) || skills.some((s) => skillKey(s) === skillKey(cleaned));
-      if (!known) res.push({ id: '__custom', label: `“${cleaned}” toevoegen`, value: cleaned, custom: true });
+      // de optie om de eigen tekst toe te voegen staat alleen bij echte suggesties: zonder treffers volstaat Enter en blijft de lijst dicht
+      if (!known && res.length > 0) res.push({ id: '__custom', label: `“${cleaned}” toevoegen`, value: cleaned, custom: true });
       return res;
     }
     if (!browsing) return [];
@@ -67,7 +68,7 @@ export function SkillTagInput({ skills, onChange, name, label, category, placeho
         onOpenBrowse={() => setCat(category ? 'suggested' : 'all')}
         autoFocus={autoFocus}
         toolbar={({ browsing }) => !browsing ? null : (
-          <div className="combo-cats" role="group" aria-label="Categorie">
+          <div className="combo-cats" role="group" aria-label="Categorie" onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; }}>
             {chips.map((c) => (
               <button type="button" tabIndex={-1} key={c.id} aria-pressed={cat === c.id} className={cat === c.id ? 'on' : ''} data-testid={`${name}-cat-${c.id}`}
                 onMouseDown={(e) => e.preventDefault()} onClick={() => setCat(c.id)}>{c.label}</button>
@@ -93,7 +94,7 @@ export function CategoryInput({ value, onChange, name, label, autoFocus }: {
   };
   return (
     <Combobox
-      name={name} label={label} chevronLabel={`${label}: lijst tonen`} emptyText="Geen categorieën gevonden"
+      name={name} label={label} placeholder="Categorie" chevronLabel={`${label}: lijst tonen`} emptyText="Geen categorieën gevonden"
       value={value} onChange={onChange} getOptions={getOptions} onSelect={(o) => onChange(o.label)} autoFocus={autoFocus}
     />
   );

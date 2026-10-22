@@ -17,6 +17,15 @@ This is a feature and UX release. The data format is unchanged (still v4). Exist
 - Shared components were aligned: one control height (34 px, 28 px small), radii (8 and 12 px), hover and focus behavior, popover elevation, segmented control, switch, tabs, menus and comboboxes. The size badge on a section row only appears on hover, focus or when the section is too long.
 - New emerald logo, extracted the same way as before (see `assets/brand/README.md`); icon, installer icon, title bar and About dialog use it.
 
+**Final refinement (surfaces, Skills editor, split input)**
+- One surface scale, always dark to light: app `#0E1111`, surface `#151919`, elevated `#1B2020`, soft `#202626`. Controls are always lighter than the surface they sit on (no recessed inputs): inputs, segmented controls, chips, group editors, dropdowns, popovers and menus all follow the same rule, checked by an automated luminance test.
+- Borders are the exception: whitespace first, type second, a hairline only where it helps. Nesting inside a Skills category is shown by one thin, low-contrast vertical guide line, not by boxes. Inputs keep a subtle boundary.
+- Expanded **Vaardigheden** is reorganized: compact section controls (Indeling, Weergave, Iconen) without stretched segments or explanatory subtitles; every category is one editing unit (name, small move and delete actions, input, chips) with a left guide line; empty groups stay compact and editable; adding a group is a small ghost action.
+- The skill and category inputs are one **split control**: an editable input and a separate chevron button in one shape with a subtle divider. Clicking the field only edits. Typing shows suggestions. The chevron opens and closes the full list without touching the value. ArrowDown, Enter, Tab and Escape keep working; ArrowDown now also opens the list from an empty focused field.
+- Icon settings: the heading is just **Iconen**. A section has one choice (Standaard, Automatisch, Merkkleuren, Monochroom, Uit); the "Eigen" badge, the inheritance note and the accordion are gone. Under Stijl, **Iconen** keeps the global switch and color choice. The stored format is unchanged: existing preferences open exactly as before.
+- Less width: compact segmented controls, short numeric and color fields, limited maximum widths inside a section, and no horizontal overflow from 380 px to 900 px editors.
+- One spacing and type scale: sentence-case headings with clear levels for section title, group heading, field label, value and secondary text.
+
 **Skills**
 - Presentation is now **Tekst | Chips**. Organization stays **Lijst | Groepen | Niveaus**.
 - Skills are added like tags: type, pick a suggestion with Tab, Enter or the mouse, the field clears and keeps focus. Arrow keys move through the suggestions, Escape closes the list without touching your text, and without an active suggestion Tab moves on as usual. Custom names always work. Duplicates in a group are ignored regardless of capitalization and spaces, and your own capitalization is kept.

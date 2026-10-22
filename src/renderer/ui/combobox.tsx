@@ -100,7 +100,7 @@ export function Combobox({ value, onChange, getOptions, onSelect, onCommitText, 
     const n = options.length;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!open) { openBrowse(); setExplicit(true); setActive(e.key === 'ArrowDown' ? 0 : -1); return; }
+      if (!open || (!n && !browsing)) { openBrowse(); setExplicit(true); setActive(e.key === 'ArrowDown' ? 0 : -1); return; }
       if (!n) return;
       setExplicit(true);
       setActive((a) => (e.key === 'ArrowDown' ? (a + 1) % n : (a - 1 + n) % n));
@@ -131,7 +131,7 @@ export function Combobox({ value, onChange, getOptions, onSelect, onCommitText, 
         close(); setBrowsing(false);
         if (had) onBlurText?.(value);
       }}>
-      <input ref={input} className="input combo-input" data-testid={name} role="combobox" aria-label={label} aria-autocomplete="list" aria-expanded={shown}
+      <input ref={input} className="combo-input" data-testid={name} role="combobox" aria-label={label} aria-autocomplete="list" aria-expanded={shown}
         aria-controls={listId} aria-haspopup="listbox" aria-activedescendant={shown && active >= 0 ? `${uid}-o${active}` : undefined}
         aria-describedby={describedBy} autoComplete="off" spellCheck={false} placeholder={placeholder} value={value}
         onChange={(e) => {
@@ -143,7 +143,7 @@ export function Combobox({ value, onChange, getOptions, onSelect, onCommitText, 
         onKeyDown={onKey} />
       <button type="button" className="combo-chevron" tabIndex={-1} aria-label={chevronLabel} aria-expanded={shown} data-testid={name ? `${name}-chevron` : undefined}
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => { input.current?.focus(); if (open && browsing) { close(); } else openBrowse(); }}>
+        onClick={() => { input.current?.focus(); if (shown) close(); else openBrowse(); }}>
         <Icon name="down" size={14} />
       </button>
       <span className="sr-only" role="status" aria-live="polite">{status}</span>

@@ -663,7 +663,6 @@ await scenario('24. PDF per template: tech-logo\'s in juiste kleuren, één pagi
 // ================= v3.0.0: UX-herontwerp =================
 const techLook = (pg, sec, id) => pg.locator(`.cv-page .sec-${sec} svg[data-tech="${id}"]`).first().getAttribute('data-look');
 const radio = (loc) => loc.getAttribute('aria-checked');
-const openAccordion = async (loc) => { if ((await loc.getByTestId('sec-tech-accordion').getAttribute('aria-expanded')) !== 'true') await loc.getByTestId('sec-tech-accordion').click(); };
 
 await scenario('25. Globaal: Toon iconen aan/uit, kleurkeuze blijft bewaard', async () => {
   await page.getByTestId('tab-style').click();
@@ -675,7 +674,6 @@ await scenario('25. Globaal: Toon iconen aan/uit, kleurkeuze blijft bewaard', as
   assert(await n() === 0, 'iconen blijven zichtbaar na uitzetten');
   assert(await page.getByTestId('tech-global-color-brand').isDisabled(), 'kleurkeuze niet uitgeschakeld bij iconen uit');
   assert(await page.locator('.cv-page .sec-skills').innerText().then((t) => t.includes('TypeScript')), 'technamen verdwijnen bij iconen uit');
-  assert(await page.getByTestId('tech-global').innerText().then((t) => /blijft bewaard/.test(t)), 'afhankelijkheid niet uitgelegd');
   await page.getByTestId('toggle-tech-icons').click();
   assert(await n() > 0, 'iconen niet teruggekomen');
   assert(await radio(page.getByTestId('tech-global-color-mono')) === 'true', 'kleurkeuze niet bewaard na uit/aan');
@@ -687,43 +685,40 @@ await scenario('25. Globaal: Toon iconen aan/uit, kleurkeuze blijft bewaard', as
   await page.getByTestId('toggle-tech-icons').click();
 });
 
-await scenario('26. Per onderdeel: volgt stijl / eigen instellingen, voorrangsregels', async () => {
+await scenario('26. Per onderdeel: één keuze Iconen (Standaard, kleur of Uit), voorrangsregels', async () => {
   await page.getByTestId('tab-sections').click();
   const pr = await open(page, 'projects');
-  await openAccordion(pr);
-  assert((await pr.getByTestId('tech-badge').innerText()) === 'Volgt stijl', 'badge standaard');
-  assert(/Volgt/.test(await pr.getByTestId('tech-inherit-note').innerText()), 'overgeërfde instelling niet zichtbaar');
-  await pr.getByTestId('tech-source-custom').click();
-  assert((await pr.getByTestId('tech-badge').innerText()) === 'Eigen', 'badge eigen');
-  await pr.locator('label.toggle', { hasText: 'Toon iconen' }).click();
-  assert(await page.locator('.cv-page .sec-projects svg[data-tech]').count() === 0, 'project-iconen blijven bij eigen uit');
+  const mode = (m) => pr.getByTestId(`tech-mode-${m}`);
+  // terminologie: kop "Iconen", geen "Eigen"- of "Volgt stijl"-labels, geen uitleg of uitklapper
+  const txt = await pr.innerText();
+  assert(/Iconen/.test(txt) && !/Technologie-iconen|Eigen|Volgt stijl|Volgt:/.test(txt), 'verouderde termen in sectie-instellingen: ' + txt.slice(0, 200));
+  assert(await pr.getByTestId('sec-tech-accordion').count() === 0 && await pr.getByTestId('tech-badge').count() === 0 && await pr.getByTestId('tech-inherit-note').count() === 0, 'uitklapper of badge nog aanwezig');
+  assert(await radio(mode('default')) === 'true', 'Standaard niet actief bij een onderdeel zonder eigen instelling');
+  await mode('off').click();
+  assert(await page.locator('.cv-page .sec-projects svg[data-tech]').count() === 0, 'project-iconen blijven bij Uit');
   assert(await page.locator('.cv-page .sec-skills svg[data-tech]').count() > 0, 'andere onderdelen worden beïnvloed');
-  assert(await pr.getByTestId('tech-color-brand').isDisabled(), 'kleur niet uitgeschakeld bij eigen uit');
-  await pr.locator('label.toggle', { hasText: 'Toon iconen' }).click();
-  await pr.getByTestId('tech-color-mono').click();
-  assert(await techLook(page, 'projects', 'typescript') === 'mono', 'eigen kleur (mono) niet toegepast');
-  // 1. globaal uit gaat voor een eigen onderdeelinstelling (aan) en voor keuzes per vaardigheid
+  await mode('mono').click();
+  assert(await techLook(page, 'projects', 'typescript') === 'mono', 'Monochroom niet toegepast');
+  // 1. globaal uit gaat voor een eigen onderdeelinstelling en voor keuzes per vaardigheid
   await page.getByTestId('tab-style').click();
   await page.getByTestId('toggle-tech-icons').click();
   await page.getByTestId('tab-sections').click();
   assert(await page.locator('.cv-page svg[data-tech]').count() === 0, 'iconen ondanks globaal uit');
   await open(page, 'projects');
-  assert(await pr.locator('label.toggle', { hasText: 'Toon iconen' }).locator('input').isDisabled(), 'sectietoggle niet uitgeschakeld bij globaal uit');
-  assert(/globaal/i.test(await pr.innerText()), 'uitleg bij globaal uit ontbreekt');
+  assert(await pr.getByTestId('tech-mode-mono').isDisabled() && await pr.getByTestId('tech-mode-off').isDisabled(), 'sectiekeuze niet uitgeschakeld bij globaal uit');
+  assert(/Stijl/.test(await pr.getByTestId('tech-mode-mono').locator('xpath=ancestor::*[@title][1]').getAttribute('title')), 'verklaring (tooltip) bij globaal uit ontbreekt');
   const sk = await open(page, 'skills');
   assert(await sk.getByTestId('skill-pills').first().locator('svg.tic').count() === 0, 'keuzes per vaardigheid zetten iconen toch aan');
   await page.getByTestId('tab-style').click();
   await page.getByTestId('toggle-tech-icons').click();
   await page.getByTestId('tab-sections').click();
   await open(page, 'projects');
-  // terug naar standaard: volgt weer de globale stijl, eigen waarden blijven bewaard
-  await open(page, 'projects');
-  await pr.getByTestId('tech-source-default').click();
-  assert(await techLook(page, 'projects', 'typescript') === 'multi', 'standaard (auto) niet hersteld');
+  // terug naar Standaard: volgt weer Stijl
+  await mode('default').click();
+  assert(await techLook(page, 'projects', 'typescript') === 'multi', 'Standaard (automatisch) niet hersteld');
   await page.screenshot({ path: path.join(out, 'v3-tech-sectie.png') });
-  // eigen instelling opnieuw aan voor de persistentietest
-  await pr.getByTestId('tech-source-custom').click();
-  await pr.getByTestId('tech-color-mono').click();
+  // eigen instelling opnieuw voor de persistentietest
+  await mode('mono').click();
 });
 
 await scenario('27. Instellingen blijven bewaard na heropenen en bij wisselen van template', async () => {
@@ -737,8 +732,7 @@ await scenario('27. Instellingen blijven bewaard na heropenen en bij wisselen va
   assert(await radio(page.getByTestId('toggle-tech-icons')) === null && await page.getByTestId('toggle-tech-icons').isChecked(), 'globaal toon iconen niet bewaard');
   await page.getByTestId('tab-sections').click();
   const pr = await open(page, 'projects');
-  await openAccordion(pr);
-  assert(await radio(pr.getByTestId('tech-source-custom')) === 'true' && await radio(pr.getByTestId('tech-color-mono')) === 'true', 'sectie-override niet bewaard');
+  assert(await radio(pr.getByTestId('tech-mode-mono')) === 'true', 'sectie-instelling niet bewaard');
   assert(await techLook(page, 'projects', 'typescript') === 'mono', 'preview na heropenen niet gelijk');
   for (const tpl of ['minimal', 'sidebar', 'header']) {
     await page.getByTestId('tab-layout').click();
@@ -746,12 +740,12 @@ await scenario('27. Instellingen blijven bewaard na heropenen en bij wisselen va
     await page.getByTestId('tab-style').click();
     assert(await radio(page.getByTestId('tech-global-color-brand')) === 'true', `globale kleur verloren bij ${tpl}`);
     await page.getByTestId('tab-sections').click();
-    assert(await radio(pr.getByTestId('tech-color-mono')) === 'true', `sectie-override verloren bij ${tpl}`);
+    assert(await radio(pr.getByTestId('tech-mode-mono')) === 'true', `sectie-instelling verloren bij ${tpl}`);
   }
   await page.getByTestId('tab-style').click();
   await page.getByTestId('tech-global-color-auto').click();
   await page.getByTestId('tab-sections').click();
-  await pr.getByTestId('tech-source-default').click();
+  await pr.getByTestId('tech-mode-default').click();
 });
 
 await scenario('28. Toetsenbord: tabs, segmented, getal, slider, accordion, menu, tooltip, verplaatsen', async () => {
@@ -896,7 +890,7 @@ await scenario('33. Toegankelijkheid (axe-core, WCAG 2.2 AA) op alle tabs', asyn
   const bad = [];
   for (const tab of ['sections', 'layout', 'style']) {
     await page.getByTestId(`tab-${tab}`).click();
-    if (tab === 'sections') { const p = await open(page, 'projects'); await openAccordion(p); }
+    if (tab === 'sections') { await open(page, 'projects'); await open(page, 'skills'); }
     if (tab === 'style') { await page.getByTestId('more-colors').click().catch(() => {}); await page.getByTestId('color-accent').click(); }
     const res = await page.evaluate(async () => {
       const r = await window.axe.run({ include: [['.editor'], ['.preview-top']] }, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } });
@@ -948,8 +942,7 @@ await scenario('35. Migratie van v2-opslag (oude tech-instellingen) behoudt het 
   await page.getByTestId('tab-sections').click();
   const pr = page.locator('[data-sec-id="pr"]');
   await pr.getByTestId('sec-projects-expand').click();
-  await openAccordion(pr);
-  assert(await radio(pr.getByTestId('tech-source-custom')) === 'true' && await radio(pr.getByTestId('tech-color-mono')) === 'true', 'sectie-override uit v2 niet zichtbaar in de editor');
+  assert(await radio(pr.getByTestId('tech-mode-mono')) === 'true', 'sectie-override uit v2 niet zichtbaar in de editor');
   fs.rmSync(ud, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
   ({ app, page } = await (async () => { await app.close(); return launch(); })());
 });
@@ -1629,9 +1622,12 @@ await scenario('46. Redesign: rustige werkbalk, eigen keuzelijst, smaragdpalet, 
     const outlines = all.filter((e) => sides(e) >= 2);
     const dividers = all.filter((e) => sides(e) === 1).length;
     const depth = (e) => { let d = 0; for (let n = e; n && n !== root.parentElement; n = n.parentElement) if (outlines.includes(n)) d++; return d; };
-    return { outlines: outlines.length, dividers, depth: Math.max(0, ...outlines.map(depth)) };
+    const cls = (e) => (e.className && e.className.baseVal === undefined ? e.className : '').toString().trim().split(/\s+/)[0] || e.tagName.toLowerCase();
+    // invoervelden mogen een rand houden; een omlijnd vlak dat andere elementen omvat (behalve de delen van één invoerveld) is een kader
+    const frames = outlines.filter((e) => !e.matches('.combo, .input, .num, .select, .seg, input, textarea') && !e.closest('.combo, .num, .select'));
+    return { outlines: frames.length, names: frames.map(cls), dividers, depth: Math.max(0, ...frames.map(depth)) };
   });
-  assert(nest.outlines === 0, `omlijnde vlakken in Vaardigheden: ${nest.outlines} (diepte ${nest.depth})`);
+  assert(nest.outlines === 0, `omlijnde vlakken in Vaardigheden: ${nest.outlines} (${nest.names.join(', ')})`);
   console.log(`     (Vaardigheden uitgeklapt: ${nest.outlines} omlijnde vlakken, ${nest.dividers} scheidingslijnen)`);
   // zichtbare focus: toetsenbordfocus geeft een duidelijke smaragdrand
   await page.getByTestId('tab-layout').focus();
@@ -1669,6 +1665,95 @@ await scenario('45. Toegankelijkheid (axe-core) van lijst, titelbalk, About en u
   bad.push(...(await run([['[data-testid="about-dialog"]']])).map((x) => 'about ' + x));
   await closeAbout();
   assert(bad.length === 0, 'axe-schendingen:\n     ' + bad.join('\n     '));
+});
+
+await scenario('47. Samengestelde invoer: typen opent niets onverwachts, chevron opent en sluit, toetsenbord en ARIA', async () => {
+  await page.getByTestId('tab-sections').click();
+  await collapseAll();
+  const sk = await open(page, 'skills');
+  if (!(await sk.getByTestId('skill-0').count())) await sk.getByTestId('skill-add').click();
+  const input = sk.getByTestId('skill-0-list');
+  const chev = sk.getByTestId('skill-0-list-chevron');
+  const popup = page.getByTestId('skill-0-list-popup');
+  // één gedeelde vorm: de rand zit om het geheel, het invoerveld zelf heeft geen rand en de chevron een scheiding
+  const shape = await input.evaluate((el) => {
+    const wrap = el.parentElement; const w = getComputedStyle(wrap); const i = getComputedStyle(el); const c = getComputedStyle(el.parentElement.querySelector('button'));
+    const rb = wrap.getBoundingClientRect(); const cb = el.parentElement.querySelector('button').getBoundingClientRect(); const ib = el.getBoundingClientRect();
+    return { wrapBorder: parseFloat(w.borderTopWidth), inputBorder: parseFloat(i.borderTopWidth), sep: parseFloat(c.borderLeftWidth), chevW: cb.width, overlap: ib.right > cb.left + 0.5,
+      centered: Math.abs((cb.top + cb.height / 2) - (rb.top + rb.height / 2)) < 1.5, sameH: Math.abs(cb.height - (rb.height - 2)) < 2 };
+  });
+  assert(shape.wrapBorder === 1 && shape.inputBorder === 0 && shape.sep === 1, 'vorm: ' + JSON.stringify(shape));
+  assert(shape.chevW >= 28 && shape.chevW <= 40 && !shape.overlap && shape.centered, 'chevron: ' + JSON.stringify(shape));
+  // ARIA
+  assert(await input.getAttribute('role') === 'combobox' && await input.getAttribute('aria-expanded') === 'false', 'invoer is geen combobox');
+  assert(await chev.evaluate((e) => e.tagName) === 'BUTTON' && !!(await chev.getAttribute('aria-label')) && await chev.getAttribute('aria-expanded') === 'false', 'chevron is geen knop met label');
+  // klikken in het veld bewerkt alleen
+  await input.click();
+  assert(!(await popup.count()), 'klikken in het veld opent de lijst');
+  // typen toont suggesties zonder bladerlijst of categorieknoppen
+  await input.fill('Ja');
+  await popup.waitFor();
+  assert(await page.locator('.combo-cats').count() === 0, 'categorieknoppen bij typen');
+  assert(await input.getAttribute('aria-expanded') === 'true', 'aria-expanded bij open lijst');
+  await page.keyboard.press('Escape');
+  assert(!(await popup.count()) && await input.inputValue() === 'Ja', 'Escape sluit de lijst en behoudt de tekst');
+  // chevron opent en sluit, en laat de waarde staan
+  await chev.click();
+  await popup.waitFor();
+  assert(await input.inputValue() === 'Ja' && await chev.getAttribute('aria-expanded') === 'true', 'chevron overschrijft de waarde of mist aria-expanded');
+  await chev.click();
+  await popup.waitFor({ state: 'detached' });
+  assert(await input.inputValue() === 'Ja', 'waarde verloren bij sluiten via chevron');
+  await input.fill('');
+  // toetsenbord: pijl omlaag opent, Escape sluit
+  await input.focus();
+  await page.keyboard.press('ArrowDown');
+  await popup.waitFor();
+  await page.keyboard.press('ArrowDown');
+  assert(!!(await input.getAttribute('aria-activedescendant')), 'geen actieve optie via aria-activedescendant');
+  await page.keyboard.press('Escape');
+  assert(!(await popup.count()), 'Escape sluit niet');
+  // de chevron staat niet in de tabvolgorde en er is geen tweede opener
+  assert(await chev.getAttribute('tabindex') === '-1', 'chevron in tabvolgorde');
+  assert(await sk.getByTestId('skill-0').locator('[aria-haspopup="listbox"]').count() <= 2, 'dubbele openers');
+});
+
+await scenario('48. Oppervlaktehiërarchie: bedieningselementen zijn lichter dan hun ondergrond; geen horizontale overloop', async () => {
+  const lum = (rgb) => { const [r, g, b] = rgb.match(/[\d.]+/g).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  await page.getByTestId('tab-sections').click();
+  await collapseAll();
+  const sk = await open(page, 'skills');
+  await sk.getByTestId('skill-display').getByText('Chips').click().catch(() => {});
+  if (!(await sk.getByTestId('skill-0').count())) await sk.getByTestId('skill-add').click();
+  const bgOf = (e) => { for (let n = e; n; n = n.parentElement) { const c = getComputedStyle(n).backgroundColor; if (c && !/rgba?\(0, 0, 0, 0\)|transparent/.test(c)) return c; } return 'rgb(14, 17, 17)'; };
+  const pairs = await page.evaluate((src) => {
+    const bg = new Function('e', 'return (' + src + ')(e)'); const out = [];
+    const sel = '.editor .card-body .input, .editor .card-body .combo, .editor .card-body .seg, .editor .card-body .pill-wrap, .editor .card-body .group-head .combo, .editor .toggle-track, .editor .num';
+    for (const e of document.querySelectorAll(sel)) { const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue;
+      const own = getComputedStyle(e).backgroundColor; if (/rgba?\(0, 0, 0, 0\)/.test(own)) continue; out.push([e.className.toString().split(' ')[0], own, bg(e.parentElement)]); }
+    return out;
+  }, bgOf.toString());
+  assert(pairs.length >= 4, 'te weinig bedieningselementen gevonden: ' + pairs.length);
+  const wrong = pairs.filter(([, own, parent]) => lum(own) <= lum(parent) + 0.0005);
+  assert(wrong.length === 0, 'bedieningselementen niet lichter dan de ondergrond: ' + JSON.stringify(wrong.slice(0, 4)));
+  // lagen: app < oppervlak < verhoogd < zacht
+  const t = await page.evaluate(() => { const c = getComputedStyle(document.documentElement); return ['--bg', '--surface', '--elevated', '--soft'].map((k) => c.getPropertyValue(k).trim()); });
+  assert(t.join() === '#0e1111,#151919,#1b2020,#202626', 'laagtokens: ' + t.join());
+  // geen horizontale overloop in smalle en brede editor, op elk tabblad
+  const splitter = page.getByTestId('splitter');
+  for (const w of [380, 900]) {
+    await page.mouse.move(0, 0);
+    const b = await splitter.boundingBox();
+    await page.mouse.move(b.x + 2, b.y + 300); await page.mouse.down(); await page.mouse.move(w, b.y + 300, { steps: 6 }); await page.mouse.up();
+    for (const tab of ['sections', 'layout', 'style']) {
+      await page.getByTestId(`tab-${tab}`).click();
+      const o = await page.locator('.editor-scroll').evaluate((e) => ({ s: e.scrollWidth, c: e.clientWidth }));
+      assert(o.s <= o.c + 1, `horizontale overloop (${tab}, ${w}px): ${JSON.stringify(o)}`);
+    }
+  }
+  await page.getByTestId('tab-sections').click();
+  const b2 = await splitter.boundingBox();
+  await page.mouse.move(b2.x + 2, b2.y + 300); await page.mouse.down(); await page.mouse.move(640, b2.y + 300, { steps: 6 }); await page.mouse.up();
 });
 
 await app.close();

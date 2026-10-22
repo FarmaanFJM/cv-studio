@@ -70,13 +70,11 @@ await skills.getByTestId('skill-display').getByText('Chips').click().catch(() =>
 await skills.scrollIntoViewIfNeeded();
 await page.waitForTimeout(200);
 await shot('03-skills-expanded');
-// 3b) technologie-iconen: eigen instellingen (zonder extra kaders of gekleurde vlakken)
-await skills.getByTestId('sec-tech-accordion').click();
-await skills.getByTestId('tech-source-custom').click();
+// 3b) iconen: één keuze per onderdeel
+await skills.getByTestId('tech-mode-brand').click();
 await page.waitForTimeout(150);
 await shot('03b-tech-settings');
-await skills.getByTestId('tech-source-default').click();
-await skills.getByTestId('sec-tech-accordion').click();
+await skills.getByTestId('tech-mode-default').click();
 // 4) autocomplete
 const input = skills.getByTestId('skill-0-list');
 await input.click();
