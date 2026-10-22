@@ -187,15 +187,15 @@ function SkillsEditor({ s, cv, edit }: { s: Extract<Section, { type: 'skills' }>
   const levels = s.mode === 'levels';
   return (
     <div className="stack">
-      <div className="controls-row">
-        <SummaFieldset label="Indeling">
+      <div className="settings">
+        <SummaFieldset row label="Indeling">
           <SummaSegmented name="skill-mode" label="Indeling vaardigheden" value={s.mode} onChange={(m) => edit<typeof s>((x) => {
             x.mode = m;
             if (m === 'levels' && x.groups.length === 0) x.groups = SKILL_LEVEL_NAMES.map((n, i) => newSkillGroup(n, 5 - i));
             if (m === 'flat' && x.groups.length === 0) x.groups = [newSkillGroup()];
           })} options={[{ value: 'flat', label: 'Lijst' }, { value: 'grouped', label: 'Groepen' }, { value: 'levels', label: 'Niveaus' }]} />
         </SummaFieldset>
-        <SummaFieldset label="Weergave">
+        <SummaFieldset row label="Weergave">
           <SummaSegmented name="skill-display" label="Weergave vaardigheden" value={s.display} onChange={(d) => edit<typeof s>((x) => { x.display = d; })}
             options={[{ value: 'text', label: 'Tekst', title: 'Gewone tekst, nooit iconen' }, { value: 'chips', label: 'Chips', title: 'Compacte chips, met iconen als die aanstaan' }]} />
         </SummaFieldset>

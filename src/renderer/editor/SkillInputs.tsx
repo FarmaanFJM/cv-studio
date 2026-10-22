@@ -67,7 +67,7 @@ export function SkillTagInput({ skills, onChange, name, label, category, placeho
         onBlurText={(t) => addMany(splitSkills(t))}
         onOpenBrowse={() => setCat(category ? 'suggested' : 'all')}
         autoFocus={autoFocus}
-        toolbar={({ browsing }) => !browsing ? null : (
+        toolbar={({ browsing }) => !browsing || category ? null : (
           <div className="combo-cats" role="group" aria-label="Categorie" onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; }}>
             {chips.map((c) => (
               <button type="button" tabIndex={-1} key={c.id} aria-pressed={cat === c.id} className={cat === c.id ? 'on' : ''} data-testid={`${name}-cat-${c.id}`}

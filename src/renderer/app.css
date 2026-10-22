@@ -426,17 +426,28 @@ html.print-mode .cv-page { overflow: hidden; }
 .combo-group { font-size: 11.5px; font-weight: 600; color: var(--faint); padding: 8px 10px 2px; }
 .combo-empty { color: var(--faint); padding: 12px 10px; }
 
-/* categorie met vaardigheden: een kopregel en daaronder de inhoud, ingesprongen langs een dunne geleidelijn (geen kader) */
-.groups { display: flex; flex-direction: column; gap: var(--s-5); }
-.group { display: flex; flex-direction: column; gap: var(--s-2); }
-.group-head { display: flex; align-items: center; gap: var(--s-1); }
-.group-name { flex: 0 1 280px; min-width: 0; }
-.group-name .combo-input, .group-name .input { font-weight: 600; }
+/* Instellingenrij: vaste labelkolom links, bediening rechts */
+.settings { display: flex; flex-direction: column; gap: var(--s-3); }
+.field.row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; column-gap: var(--s-3); }
+.field.row > .field-label { align-self: center; }
+.field.row > .field-hint { grid-column: 2; }
+.field.row > .seg, .field.row > [role=radiogroup] { justify-self: start; max-width: 100%; }
+.settings > div > .field.row { width: 100%; }
+
+/* categorie met vaardigheden: een rechthoekige eenheid (kop, ingesprongen invoer, chips), gescheiden door horizontale lijnen */
+.groups { display: flex; flex-direction: column; max-width: 520px; border-bottom: 1px solid var(--divider); }
+.group { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4) 0; border-top: 1px solid var(--divider); }
+.group-head { display: flex; align-items: center; gap: var(--s-2); }
+.group-name { flex: 1 1 auto; min-width: 0; }
+.group-name .combo, .group-name .input { height: 38px; }
+.group-name .combo-input, .group-name .input { font-weight: 600; font-size: 13.5px; }
 .dots-num { width: 150px; flex: none; }
-.group-actions { display: flex; align-items: center; flex: none; margin-left: var(--s-1); }
+.group-actions { display: flex; align-items: center; flex: none; margin-left: auto; }
 .group-actions .btn { color: var(--faint); }
 .group-actions .btn:hover:not(:disabled) { color: var(--text); }
 .group-actions [data-testid$='-remove']:hover { color: var(--danger); }
-.group-body { display: flex; flex-direction: column; gap: var(--s-2); margin-left: 11px; padding: 2px 0 2px var(--s-4); border-left: 1px solid var(--divider); max-width: 440px; }
-.group-body.flat { margin-left: 0; padding-left: 0; border-left: 0; }
+.group-body { display: flex; flex-direction: column; gap: var(--s-2); margin-left: var(--s-6); max-width: none; }
+.group-body .combo { height: 30px; font-size: 12.5px; }
+.group-body.flat { margin-left: 0; max-width: 520px; }
+.groups + .btn-row, .groups ~ .btn-row { padding-top: var(--s-2); }
 .skill-input { display: flex; flex-direction: column; gap: 6px; }

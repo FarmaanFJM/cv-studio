@@ -1756,6 +1756,52 @@ await scenario('48. Oppervlaktehiërarchie: bedieningselementen zijn lichter dan
   await page.mouse.move(b2.x + 2, b2.y + 300); await page.mouse.down(); await page.mouse.move(640, b2.y + 300, { steps: 6 }); await page.mouse.up();
 });
 
+await scenario('49. Vaardighedenlayout: rechthoekige groepen zonder geleidelijn, rijen met labelkolom, geen categoriebalk in een bekende groep', async () => {
+  await page.getByTestId('tab-sections').click();
+  await collapseAll();
+  const sk = await open(page, 'skills');
+  await sk.getByTestId('skill-mode-grouped').click();
+  await sk.getByTestId('skill-display-chips').click();
+  while (await sk.locator('[data-testid^="skill-"][data-testid$="-remove"]').count()) await sk.locator('[data-testid^="skill-"][data-testid$="-remove"]').first().click();
+  await sk.getByTestId('skill-add').click();
+  await sk.getByTestId('skill-0-name').fill('Programmeertalen');
+  await page.keyboard.press('Escape');
+  await sk.getByTestId('skill-add').click();
+  await sk.getByTestId('skill-1-name').fill('Mijn eigen groep');
+  await page.keyboard.press('Escape');
+  // geen verticale geleidelijn, wel horizontale scheiding tussen groepen
+  const geo = await sk.evaluate((root) => {
+    const g = [...root.querySelectorAll('.group')];
+    const r = (e) => e.getBoundingClientRect();
+    const body = g[0].querySelector('.group-body'); const head = g[0].querySelector('.group-head');
+    const hb = r(head), bb = r(body.querySelector('.combo'));
+    const actions = g[0].querySelector('.group-actions'); const ab = r(actions.lastElementChild);
+    const lab = root.querySelector('.field.row .field-label'); const seg = root.querySelector('.field.row .seg');
+    return {
+      n: g.length, guide: parseFloat(getComputedStyle(body).borderLeftWidth), top: g.map((e) => parseFloat(getComputedStyle(e).borderTopWidth)),
+      indent: bb.left - hb.left, rightHead: Math.round(hb.right), rightInput: Math.round(bb.right), actionsRight: Math.round(ab.right),
+      headH: r(head.querySelector('.combo')).height, inputH: bb.height,
+      labelLeftOfControl: r(lab).right <= r(seg).left && Math.abs((r(lab).top + r(lab).height / 2) - (r(seg).top + r(seg).height / 2)) < 4
+    };
+  });
+  assert(geo.guide === 0, 'verticale geleidelijn aanwezig');
+  assert(geo.top.every((w) => w === 1), 'horizontale scheiding tussen groepen ontbreekt: ' + JSON.stringify(geo.top));
+  assert(geo.indent >= 24, 'te weinig inspringing: ' + geo.indent);
+  assert(Math.abs(geo.rightHead - geo.rightInput) <= 1 && geo.actionsRight <= geo.rightHead && geo.actionsRight >= geo.rightHead - 12, `rechterrand kop/invoer/acties: ${JSON.stringify(geo)}`);
+  assert(geo.headH > geo.inputH, 'groepskop niet duidelijker dan de ingesprongen invoer');
+  assert(geo.labelLeftOfControl, 'label staat niet links van de bediening');
+  // bekende groep: geen categoriebalk, direct gefilterde lijst; onbekende groep houdt de balk
+  await sk.getByTestId('skill-0-list-chevron').click();
+  await page.getByTestId('skill-0-list-popup').waitFor();
+  assert(await page.locator('.combo-cats').count() === 0, 'categoriebalk in bekende groep');
+  assert(await page.getByTestId('skill-0-list-popup').getByRole('option', { name: /TypeScript/ }).count() > 0, 'lijst niet gefilterd op de groep');
+  await page.keyboard.press('Escape');
+  await sk.getByTestId('skill-1-list-chevron').click();
+  await page.getByTestId('skill-1-list-popup').waitFor();
+  assert(await page.locator('.combo-cats').count() === 1, 'categoriebalk ontbreekt in groep zonder bekende categorie');
+  await page.keyboard.press('Escape');
+});
+
 await app.close();
 fs.rmSync(userData, { recursive: true, force: true });
 const failed = results.filter((r) => !r[0]);

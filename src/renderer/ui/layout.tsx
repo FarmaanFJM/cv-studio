@@ -16,9 +16,9 @@ export function SummaField({ label, children, hint, error }: { label: string; ch
 }
 
 /** Groep samenhangende bedieningselementen (bijv. een segmented control) met zichtbaar label. */
-export function SummaFieldset({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+export function SummaFieldset({ label, children, hint, row }: { label: string; children: React.ReactNode; hint?: string; row?: boolean }) {
   return (
-    <div className="field" role="group" aria-label={label}>
+    <div className={row ? 'field row' : 'field'} role="group" aria-label={label}>
       <span className="field-label">{label}</span>
       {children}
       {hint && <span className="field-hint">{hint}</span>}

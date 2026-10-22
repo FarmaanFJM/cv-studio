@@ -26,7 +26,7 @@ export function TechSettingsPanel({ cv, s, edit }: { cv: CV; s: TechSection; edi
   });
   return (
     <div title={globalOff ? 'Iconen staan uit bij Stijl' : undefined}>
-      <SummaFieldset label="Iconen">
+      <SummaFieldset row label="Iconen">
         <SummaSegmented<IconMode> name="tech-mode" label="Iconen" value={mode} disabled={globalOff} onChange={set} options={[
           { value: 'default', label: 'Standaard', title: 'Volgt de instelling bij Stijl' },
           { value: 'auto', label: 'Automatisch', title: TECH_COLOR_OPTIONS[0].title },
