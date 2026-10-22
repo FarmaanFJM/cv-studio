@@ -101,6 +101,7 @@ import { BRAND_PATHS } from './icons';
 import { contrast, luminance } from '../shared/color';
 import type { TechColorMode } from '../shared/model';
 import { BRAND_MULTI } from './brandIcons.generated';
+import { compact } from '../shared/skillCatalog';
 
 export type TechGroup = 'Talen' | 'Frameworks' | 'Data' | 'Tools' | 'Platformen' | 'Game & 3D' | 'Algemeen';
 
@@ -243,7 +244,7 @@ const byId = new Map(TECH_ICONS.map((t) => [t.id, t]));
 export const getTech = (id: string | undefined | null): TechDef | undefined => (id ? byId.get(id) : undefined);
 
 /** Normaliseert een naam voor vergelijking: "Node.js", "node js" en "NodeJS" worden gelijk. */
-export const compact = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9#+]/g, '');
+export { compact } from '../shared/skillCatalog';
 
 const aliasMap = new Map<string, string>();
 for (const t of TECH_ICONS) {

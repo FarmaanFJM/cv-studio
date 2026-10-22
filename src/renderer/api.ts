@@ -1,4 +1,5 @@
 import { AppState, CV, createEmptyCv, sanitizeCv, sanitizeState } from '../shared/model';
+import type { UpdateStatus, UpdatesApi } from '../shared/update';
 
 export type Result<T = object> = ({ ok: true } & T) | { ok: false; error?: string; canceled?: boolean };
 
@@ -12,6 +13,8 @@ export interface CvApi {
   getPrintCv(): Promise<CV | null>;
   getVersion(): Promise<string>;
   isPrintMode: boolean;
+  shell?: { customTitleBar: boolean; platform: string };
+  updates: UpdatesApi;
 }
 
 declare global {
@@ -24,8 +27,16 @@ declare global {
 const KEY = 'cv-studio-state';
 
 /** Fallback voor ontwikkelen in een gewone browser (localStorage). In de echte app is cvApi altijd aanwezig. */
+const browserStatus: UpdateStatus = {
+  state: { kind: 'disabled', reason: 'Updates zijn alleen beschikbaar in de desktopapp.' }, currentVersion: 'dev', autoCheck: false,
+  lastCheckAt: null, lastResult: null, canInstall: false, installBlockedReason: null
+};
 const browserApi: CvApi = {
   isPrintMode: false,
+  updates: {
+    getStatus: async () => browserStatus, check: async () => browserStatus, download: async () => browserStatus, install: async () => ({ ok: false }),
+    setAutoCheck: async () => browserStatus, openRelease: async () => undefined, onStatus: () => () => undefined
+  },
   async loadState() {
     try {
       const t = localStorage.getItem(KEY);

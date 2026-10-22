@@ -30,9 +30,17 @@ If you are a trademark owner and want a logo removed or changed, please open an 
 
 ## Libraries bundled into the application
 
-React, React DOM, Scheduler, pdf-lib and its dependencies (`@pdf-lib/standard-fonts`, `@pdf-lib/upng`, `pako`, `tslib`) are bundled into the application. See [`licenses/npm-bundled.txt`](licenses/npm-bundled.txt).
+React, React DOM, Scheduler, pdf-lib and its dependencies (`@pdf-lib/standard-fonts`, `@pdf-lib/upng`, `pako`, `tslib`) are bundled into the application. So is `electron-updater` 6.x (MIT) with its runtime dependencies (`builder-util-runtime`, `debug`, `fs-extra`, `graceful-fs`, `js-yaml`, `argparse`, `jsonfile`, `lazy-val`, `lodash.escaperegexp`, `lodash.isequal`, `ms`, `sax`, `semver`, `tiny-typed-emitter`, `universalify`). See [`licenses/npm-bundled.txt`](licenses/npm-bundled.txt); some of these packages ship no license file, in which case the file records the license declared in their `package.json`.
 
 Development tools (Vite, TypeScript, Vitest, Playwright, axe-core, electron-builder and others) are used to build and test CV Studio and are not part of the installed application. Their licenses are listed in `package-lock.json` and in each package.
+
+## CV Studio name and logo
+
+The CV Studio logo (`assets/brand/`, `build/icon.*`, the data URL in `src/renderer/brand.generated.ts`) was supplied by the project owner. It is included so the application and installer carry the project's branding. The source code is MIT licensed, but that license does not give anyone permission to present a modified or unofficial build as the official CV Studio using its name or logo. No registered trademark is claimed.
+
+## Build tooling note
+
+`resedit` (MIT) is used only while building, to embed the icon and version information in the Windows executable. It is not part of the installed application.
 
 ## Example content
 

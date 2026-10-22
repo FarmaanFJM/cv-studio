@@ -1,0 +1,260 @@
+{
+  "version": 4,
+  "activeId": "mvid71yw1y9c6",
+  "cvs": [
+    {
+      "id": "mvid71yw1y9c6",
+      "name": "Fictief cv",
+      "createdAt": 1792602417848,
+      "updatedAt": 1792602417848,
+      "template": "header",
+      "style": {
+        "accent": "#1f4e79",
+        "sidebarBg": "#1f4e79",
+        "headingColor": "",
+        "textColor": "",
+        "dividerColor": "",
+        "font": "inter",
+        "fontSize": 9.5,
+        "lineHeight": 1.4,
+        "sectionGap": 5.6,
+        "itemGap": 2.4,
+        "margin": 13,
+        "sidebarWidth": 70,
+        "photoSize": 40,
+        "headingStyle": "caps",
+        "itemLayout": "inline",
+        "icons": true,
+        "techIcons": true,
+        "nameInSidebar": false,
+        "techColorMode": "auto"
+      },
+      "personal": {
+        "fullName": "Voorbeeld Persoon",
+        "title": "Stagiair",
+        "email": "voorbeeld@example.com",
+        "phone": "",
+        "location": "Utrecht",
+        "birthDate": "",
+        "linkedin": "",
+        "github": "github.com/voorbeeld",
+        "website": ""
+      },
+      "photo": null,
+      "sections": [
+        {
+          "id": "mvid71yw274pb",
+          "title": "Contact",
+          "visible": true,
+          "zone": "supplementary",
+          "type": "personal"
+        },
+        {
+          "id": "mvid71yw3x74r",
+          "title": "Profiel",
+          "visible": true,
+          "zone": "primary",
+          "type": "profile",
+          "text": "Fictieve introductie voor een test."
+        },
+        {
+          "id": "mvid71yw4rn2t",
+          "title": "Projecten",
+          "visible": true,
+          "zone": "primary",
+          "type": "projects",
+          "techOverride": false,
+          "techShow": true,
+          "techColor": "auto",
+          "techDisplay": "inline",
+          "items": [
+            {
+              "id": "p1",
+              "name": "Testproject",
+              "tech": "TypeScript, React",
+              "period": "2024",
+              "description": "",
+              "github": ""
+            }
+          ]
+        },
+        {
+          "id": "mvid71yw5wx4a",
+          "title": "Opleiding",
+          "visible": true,
+          "zone": "primary",
+          "type": "education",
+          "items": []
+        },
+        {
+          "id": "mvid71yw6hwiu",
+          "title": "Werkervaring",
+          "visible": true,
+          "zone": "primary",
+          "type": "experience",
+          "items": []
+        },
+        {
+          "id": "mvid71yw8lvsr",
+          "title": "Talen",
+          "visible": true,
+          "zone": "supplementary",
+          "type": "languages",
+          "display": "text",
+          "items": []
+        },
+        {
+          "id": "sec-inline",
+          "title": "Skills inline",
+          "visible": true,
+          "zone": "supplementary",
+          "type": "skills",
+          "mode": "grouped",
+          "techOverride": true,
+          "techShow": true,
+          "techColor": "brand",
+          "display": "inline",
+          "iconOverrides": {
+            "react": "vue",
+            "git": "none"
+          },
+          "groups": [
+            {
+              "id": "g1",
+              "name": "Programmeertalen",
+              "level": 0,
+              "skills": [
+                "TypeScript",
+                "Python",
+                "Eigen Taal"
+              ]
+            },
+            {
+              "id": "g2",
+              "name": "Eigen groep",
+              "level": 0,
+              "skills": [
+                "React",
+                "Git"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-list",
+          "title": "Skills lijst",
+          "visible": true,
+          "zone": "primary",
+          "type": "skills",
+          "mode": "grouped",
+          "techOverride": true,
+          "techShow": true,
+          "techColor": "brand",
+          "display": "list",
+          "iconOverrides": {
+            "react": "vue",
+            "git": "none"
+          },
+          "groups": [
+            {
+              "id": "g1",
+              "name": "Programmeertalen",
+              "level": 0,
+              "skills": [
+                "TypeScript",
+                "Python",
+                "Eigen Taal"
+              ]
+            },
+            {
+              "id": "g2",
+              "name": "Eigen groep",
+              "level": 0,
+              "skills": [
+                "React",
+                "Git"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-text",
+          "title": "Skills tekst",
+          "visible": true,
+          "zone": "supplementary",
+          "type": "skills",
+          "mode": "flat",
+          "techOverride": false,
+          "techShow": true,
+          "techColor": "brand",
+          "display": "text",
+          "iconOverrides": {
+            "react": "vue",
+            "git": "none"
+          },
+          "groups": [
+            {
+              "id": "g1",
+              "name": "Programmeertalen",
+              "level": 0,
+              "skills": [
+                "TypeScript",
+                "Python",
+                "Eigen Taal"
+              ]
+            },
+            {
+              "id": "g2",
+              "name": "Eigen groep",
+              "level": 0,
+              "skills": [
+                "React",
+                "Git"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-chips",
+          "title": "Skills chips",
+          "visible": false,
+          "zone": "supplementary",
+          "type": "skills",
+          "mode": "levels",
+          "techOverride": true,
+          "techShow": true,
+          "techColor": "brand",
+          "display": "chips",
+          "iconOverrides": {
+            "react": "vue",
+            "git": "none"
+          },
+          "groups": [
+            {
+              "id": "g1",
+              "name": "Programmeertalen",
+              "level": 0,
+              "skills": [
+                "TypeScript",
+                "Python",
+                "Eigen Taal"
+              ]
+            },
+            {
+              "id": "g2",
+              "name": "Eigen groep",
+              "level": 0,
+              "skills": [
+                "React",
+                "Git"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "swatches": [
+    "#112233"
+  ]
+}

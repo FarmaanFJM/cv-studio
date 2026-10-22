@@ -16,7 +16,7 @@ export function docsDemoCv(): CV {
     if (titles[s.type]) s.title = titles[s.type];
     if (s.type === 'profile') s.text = 'Computer science student who enjoys building small, useful web apps and games. Comfortable with TypeScript, React and Node.js, and keen to learn from an experienced team during an internship.';
     if (s.type === 'projects') {
-      s.techDisplay = 'inline';
+      s.techDisplay = 'chips';
       s.items = [
         { id: uid(), name: 'Habit Tracker', tech: 'TypeScript, React, Firebase', period: '2025', description: '- Offline-first web app with daily streaks and charts', github: 'github.com/alexmorgan-demo/habit-tracker' },
         { id: uid(), name: 'Campus Marketplace API', tech: 'Node.js, MongoDB, Docker', period: '2024', description: '- REST API with authentication, containerized with Docker', github: '' },

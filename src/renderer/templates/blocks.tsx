@@ -93,7 +93,7 @@ export function hasContent(s: Section, cv: CV): boolean {
     case 'personal': return contactRows(cv).length > 0;
     case 'profile': return s.text.trim() !== '';
     case 'experience': case 'education': case 'projects': case 'languages': return s.items.length > 0;
-    case 'skills': return s.groups.some((g) => g.name.trim() || g.skills.length);
+    case 'skills': return s.groups.some((g) => g.skills.length > 0); // een categorie zonder vaardigheden (bijv. net uit een preset gekozen) komt niet in het cv
     case 'custom':
       return s.mode === 'text' ? s.text.trim() !== '' : s.items.some((i) => i.text.trim() || i.value.trim());
   }
@@ -112,24 +112,27 @@ const urlIcon = (v: string): string | null => {
   return /^https?:\/\/|^[\w-]+(\.[\w-]+)+(\/|$)/i.test(v.trim()) ? 'globe' : null;
 };
 
-/** Vaardigheden als tekst, lijst of chips; met optionele iconen (icon-first). */
-function SkillList({ skills, display, iconFor }: { skills: string[]; display: 'text' | 'inline' | 'list' | 'chips'; iconFor: (name: string) => string | null }) {
+/** Vaardigheden als gewone tekst of als chips (chips tonen iconen als die aanstaan). De indeling (groepen, niveaus) bepaalt de aanroeper. */
+function SkillList({ skills, display, iconFor }: { skills: string[]; display: 'text' | 'chips'; iconFor: (name: string) => string | null }) {
   if (!skills.length) return null;
-  const icons = skills.map(iconFor);
-  const item = (sk: string, i: number) => (
-    <>{icons[i] && <TechIcon id={icons[i]!} />}<span className="tn">{sk}</span></>
-  );
-  if (display === 'chips') return <div className="chips">{skills.map((sk, i) => <span className={`chip ${icons[i] ? 'has-icon' : ''}`} key={i}>{item(sk, i)}</span>)}</div>;
-  if (display === 'list') return <ul className={`skill-ul ${icons.some(Boolean) ? 'with-icons' : ''}`}>{skills.map((sk, i) => <li key={i}>{item(sk, i)}</li>)}</ul>;
-  if (display === 'inline' && icons.some(Boolean)) return <div className="tech-inline">{skills.map((sk, i) => <span className="ti" key={i}>{item(sk, i)}</span>)}</div>;
+  if (display === 'chips') {
+    return (
+      <div className="chips">
+        {skills.map((sk, i) => {
+          const icon = iconFor(sk);
+          return <span className={`chip ${icon ? 'has-icon' : ''}`} key={i}>{icon && <TechIcon id={icon} />}<span className="tn">{sk}</span></span>;
+        })}
+      </div>
+    );
+  }
   return <div className="skill-list">{skills.join(', ')}</div>;
 }
 
-function TechChips({ tech, icons, variant }: { tech: string; icons: boolean; variant: 'inline' | 'chips' }) {
+function TechChips({ tech, icons }: { tech: string; icons: boolean }) {
   const list = tech.split(/[,;|]/).map((t) => t.trim()).filter(Boolean);
   if (!list.length) return null;
   return (
-    <div className={`chips tech-chips ${variant === 'inline' ? 'plain' : ''}`}>
+    <div className="chips tech-chips">
       {list.map((t, i) => {
         const id = icons ? matchTech(t) : null;
         return <span className={`chip ${id ? 'has-icon' : ''}`} key={i}>{id && <TechIcon id={id} />}<span className="tn">{t}</span></span>;
@@ -183,7 +186,7 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
                 <div className="strong">{i.name}</div>
                 <div className="dates">{i.period}</div>
               </div>
-              {i.tech && (s.techDisplay === 'text' ? <div className="sub tech">{i.tech}</div> : <TechChips tech={i.tech} icons={effectiveTech(cv.style, s).show} variant={s.techDisplay} />)}
+              {i.tech && (s.techDisplay === 'text' ? <div className="sub tech">{i.tech}</div> : <TechChips tech={i.tech} icons={effectiveTech(cv.style, s).show} />)}
               <RichText text={i.description} />
               {i.github && <div className="proj-link">{cv.style.icons && <ContactIconSvg name="github" />}<Link value={cleanUrl(i.github)} link={href(i.github)} /></div>}
             </div>
@@ -191,12 +194,12 @@ export function SectionBody({ s, cv }: { s: Section; cv: CV }) {
         </>
       );
     case 'skills': {
-      const showIcons = s.display !== 'text' && effectiveTech(cv.style, s).show; // 'Tekst' toont nooit iconen
+      const showIcons = s.display === 'chips' && effectiveTech(cv.style, s).show; // 'Tekst' toont nooit iconen
       const iconFor = (n: string) => resolveSkillIcon(n, showIcons, s.iconOverrides);
       if (s.mode === 'flat') {
         return <SkillList skills={s.groups.flatMap((g) => g.skills)} display={s.display} iconFor={iconFor} />;
       }
-      const groups: SkillGroup[] = s.groups.filter((g) => g.name.trim() || g.skills.length);
+      const groups: SkillGroup[] = s.groups.filter((g) => g.skills.length > 0);
       return (
         <>
           {groups.map((g) => (

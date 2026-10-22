@@ -1,4 +1,6 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Icon } from '../icons';
 
 // ---------- toggle (schakelaar) ----------
 
@@ -43,15 +45,119 @@ export function SummaSegmented<T extends string>({ value, options, onChange, nam
   );
 }
 
-// ---------- select (grotere lijsten) ----------
+// ---------- select (aangepaste keuzelijst, geen standaard <select>) ----------
 
-export function SummaSelect<T extends string>({ value, options, onChange, label, name, disabled }: {
+export interface SelectAction { key: string; label: string; onSelect: () => void; icon?: React.ReactNode }
+
+/**
+ * Keuzelijst in de stijl van de app (ARIA "select-only combobox"): een knop met de huidige keuze en een lijst met opties in een popover.
+ * Bediening: Enter, spatie of pijl omlaag opent; pijltjes, Home, End en typen om te zoeken; Enter kiest; Escape sluit; Tab sluit.
+ * `actions` zijn losse acties onderaan de lijst (bijv. "Nieuw cv") en zijn net zo met het toetsenbord te bereiken.
+ */
+export function SummaSelect<T extends string>({ value, options, onChange, label, name, disabled, actions = [], className = '', icon }: {
   value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; label: string; name?: string; disabled?: boolean;
+  actions?: SelectAction[]; className?: string; icon?: React.ReactNode;
 }) {
+  const uid = useId();
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxH: number } | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  const typed = useRef({ text: '', at: 0 });
+  const items = [
+    ...options.map((o) => ({ kind: 'option' as const, key: o.value as string, label: o.label })),
+    ...actions.map((a) => ({ kind: 'action' as const, key: a.key, label: a.label, icon: a.icon }))
+  ];
+  const current = options.find((o) => o.value === value);
+  const selected = Math.max(0, options.findIndex((o) => o.value === value));
+
+  const show = () => { if (disabled) return; setActive(selected); setOpen(true); };
+  const hide = (refocus = true) => { setOpen(false); if (refocus) trigger.current?.focus(); };
+  const choose = (i: number) => {
+    const it = items[i];
+    if (!it) return;
+    hide();
+    if (it.kind === 'option') { if (it.key !== value) onChange(it.key as T); } else actions.find((a) => a.key === it.key)?.onSelect();
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = trigger.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom - 12;
+      const up = below < 200 && r.top > below;
+      setPos({ left: Math.min(r.left, window.innerWidth - Math.max(r.width, 260) - 8), width: Math.max(r.width, 260), ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }), maxH: Math.max(140, Math.min(360, up ? r.top - 12 : below)) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const f = (e: MouseEvent) => { if (!pop.current?.contains(e.target as Node) && !trigger.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', f);
+    return () => document.removeEventListener('mousedown', f);
+  }, [open]);
+  useEffect(() => { if (open) pop.current?.querySelector(`[data-idx="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active, open, pos]);
+
+  const key = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+    if (!open) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); show(); }
+      return;
+    }
+    const n = items.length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(n - 1, a + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(0, a - 1)); }
+    else if (e.key === 'Home') { e.preventDefault(); setActive(0); }
+    else if (e.key === 'End') { e.preventDefault(); setActive(n - 1); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(active); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hide(); }
+    else if (e.key === 'Tab') setOpen(false);
+    else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // typen om te zoeken: opeenvolgende tekens binnen een seconde vormen één zoekterm
+      const t = typed.current;
+      t.text = Date.now() - t.at < 900 ? t.text + e.key.toLowerCase() : e.key.toLowerCase();
+      t.at = Date.now();
+      const hit = items.findIndex((it) => it.kind === 'option' && it.label.toLowerCase().startsWith(t.text));
+      if (hit >= 0) setActive(hit);
+    }
+  };
+
   return (
-    <select className="input select" aria-label={label} data-testid={name} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)}>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    <div className={`select ${className}`}>
+      <button type="button" ref={trigger} className="select-btn" role="combobox" aria-haspopup="listbox" aria-expanded={open} aria-controls={`${uid}-list`}
+        aria-label={`${label}: ${current?.label ?? ''}`} data-testid={name} disabled={disabled}
+        aria-activedescendant={open ? `${uid}-o${active}` : undefined}
+        onClick={() => (open ? hide(false) : show())} onKeyDown={key}>
+        {icon}
+        <span className="select-value" data-testid={name ? `${name}-value` : undefined}>{current?.label ?? ''}</span>
+        <span className="select-chev" aria-hidden="true"><Icon name="down" size={14} /></span>
+      </button>
+      {open && pos && createPortal(
+        <div className="popover select-pop" ref={pop} onMouseDown={(e) => e.preventDefault()}
+          style={{ position: 'fixed', left: pos.left, width: pos.width, top: pos.top ?? 'auto', bottom: pos.bottom ?? 'auto', maxHeight: pos.maxH }}>
+          <div id={`${uid}-list`} role="listbox" aria-label={label} className="select-list">
+            {items.map((it, i) => (
+              <React.Fragment key={`${it.kind}-${it.key}`}>
+                {it.kind === 'action' && (i === 0 || items[i - 1].kind === 'option') && <div className="select-sep" role="presentation" />}
+                <div id={`${uid}-o${i}`} data-idx={i} role="option" aria-selected={it.kind === 'option' && it.key === value}
+                  data-testid={name ? `${name}-${it.kind === 'option' ? 'opt' : 'action'}-${it.key}` : undefined}
+                  className={`select-opt ${it.kind === 'action' ? 'action' : ''} ${i === active ? 'active' : ''}`}
+                  onMouseMove={() => { if (active !== i) setActive(i); }} onClick={() => choose(i)}>
+                  {it.kind === 'action' && it.icon}
+                  <span className="select-label">{it.label}</span>
+                  {it.kind === 'option' && it.key === value && <Icon name="check" size={14} />}
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }
 

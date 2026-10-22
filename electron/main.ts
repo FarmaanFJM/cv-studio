@@ -1,9 +1,15 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CV, fileSafeName, sanitizeCv } from '../src/shared/model';
 import { CvStore } from './storage';
 import { inspectPdf } from './pdf';
+import { SettingsStore } from './settings';
+import { UpdateService } from './updateService';
+import { createBackend } from './updaterBackend';
+import { RELEASES_URL, UpdateStatus } from '../src/shared/update';
+
+declare const __PUBLISHER_NAME__: string; // ingebakken bij het bouwen (esbuild define): leeg zolang de installers niet ondertekend zijn
 
 const isDev = !app.isPackaged && !!process.env.VITE_DEV_SERVER_URL;
 const testMode = !!process.env.CV_STUDIO_TEST;
@@ -11,8 +17,20 @@ const testMode = !!process.env.CV_STUDIO_TEST;
 if (process.env.CV_STUDIO_USER_DATA) app.setPath('userData', process.env.CV_STUDIO_USER_DATA);
 
 let store: CvStore;
+let updates: UpdateService;
 let mainWindow: BrowserWindow | null = null;
 const printJobs = new Map<number, CV>();
+let exportsRunning = 0; // een update mag de app nooit herstarten tijdens een export
+
+/** Hoogte van de eigen titelbalk; de systeemknoppen (titleBarOverlay) krijgen dezelfde hoogte. */
+const TITLEBAR_H = 44;
+
+/** Het pictogram van CV Studio: in de gebouwde app uit resources, tijdens ontwikkelen uit de map build. */
+function iconPath(): string | undefined {
+  const file = process.platform === 'win32' ? 'icon.ico' : 'icon.png';
+  const p = app.isPackaged ? path.join(process.resourcesPath, file) : path.join(__dirname, '../build', file);
+  return fs.existsSync(p) ? p : undefined;
+}
 
 function pageUrl(query = ''): string {
   if (isDev) return `${process.env.VITE_DEV_SERVER_URL}${query}`;
@@ -26,8 +44,15 @@ function createWindow(): BrowserWindow {
     minWidth: 1000,
     minHeight: 640,
     title: 'CV Studio',
-    backgroundColor: '#eef1f5',
+    icon: iconPath(),
+    backgroundColor: '#0c0d0e',
     autoHideMenuBar: true,
+    // Eigen titelbalk in de pagina, maar met de systeemknoppen (verkleinen, maximaliseren, sluiten): dat behoudt
+    // Windows Snap, schaling per scherm, dubbelklikken om te maximaliseren en randen om het formaat te wijzigen.
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {
+      titleBarStyle: 'hidden' as const,
+      titleBarOverlay: { color: '#141618', symbolColor: '#eceeef', height: TITLEBAR_H }
+    }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -60,6 +85,8 @@ function testPath(name: string): string | undefined {
 }
 
 async function renderPdf(cv: CV): Promise<Buffer> {
+  exportsRunning++;
+  // Het verborgen exportvenster heeft geen titelbalk en laadt alleen de pagina (?print=1): de app-shell staat nooit in de PDF.
   const win = new BrowserWindow({
     show: false,
     width: 794,
@@ -97,10 +124,47 @@ async function renderPdf(cv: CV): Promise<Buffer> {
   } finally {
     printJobs.delete(win.webContents.id);
     win.destroy();
+    exportsRunning--;
   }
 }
 
+function broadcastUpdates(s: UpdateStatus) {
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents.getURL().indexOf('print=1') < 0) w.webContents.send('updates:status', s);
+}
+
+/** Alleen links naar de eigen releasepagina mogen vanuit de interface worden geopend. */
+function releaseLink(url?: string): string {
+  return typeof url === 'string' && url.startsWith(`${RELEASES_URL}`) ? url : RELEASES_URL;
+}
+
+function setupUpdates() {
+  const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
+  // Testfeed alleen in testmodus: in een gewone start gaat er nooit een verzoek naar een andere server.
+  const testFeed = testMode ? process.env.CV_STUDIO_UPDATE_FEED : undefined;
+  const active = !!testFeed || (app.isPackaged && !testMode);
+  // Automatisch installeren pas als de installers zijn ondertekend (win.publisherName in package.json). electron-updater controleert dan
+  // de Authenticode-handtekening van de download; zonder publisherName zou het alleen een checksum uit hetzelfde, niet ondertekende
+  // releasebestand vergelijken en dat bewijst de herkomst niet. In testmodus kan het installatiepad met CV_STUDIO_UPDATE_TRUST=1 worden getest.
+  const trusted = (typeof __PUBLISHER_NAME__ === 'string' && __PUBLISHER_NAME__ !== '') || (testMode && process.env.CV_STUDIO_UPDATE_TRUST === '1');
+  updates = new UpdateService({
+    currentVersion: app.getVersion(),
+    backend: active ? createBackend(testFeed) : null,
+    disabledReason: testMode ? 'Updates staan uit in testmodus.' : 'Updates zijn alleen beschikbaar in de geïnstalleerde app.',
+    settings, canInstall: trusted,
+    isBusy: () => exportsRunning > 0,
+    broadcast: broadcastUpdates
+  });
+  updates.scheduleStartupCheck(testFeed ? 500 : 15000);
+  ipcMain.handle('updates:status', () => updates.getStatus());
+  ipcMain.handle('updates:check', () => updates.check());
+  ipcMain.handle('updates:download', () => updates.download());
+  ipcMain.handle('updates:install', () => updates.install());
+  ipcMain.handle('updates:set-auto', (_e, on) => updates.setAutoCheck(on === true));
+  ipcMain.handle('updates:open-release', (_e, url) => { void shell.openExternal(releaseLink(url)); });
+}
+
 function registerIpc() {
+  setupUpdates();
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('store:load', () => store.load());
   ipcMain.handle('store:save', (_e, state) => {
@@ -184,6 +248,8 @@ if (!gotLock && !testMode) {
   app.on('second-instance', () => {
     if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
   });
+  if (process.platform === 'win32') app.setAppUserModelId('nl.cvstudio.app'); // zelfde id als appId: taakbalk, snelkoppeling en pictogram horen bij elkaar
+  nativeTheme.themeSource = 'dark';
   app.whenReady().then(() => {
     store = new CvStore(path.join(app.getPath('userData'), 'data'));
     registerIpc();

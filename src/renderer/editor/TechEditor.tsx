@@ -42,26 +42,33 @@ function IconPicker({ current, onPick, onClose }: { current: string | null; onPi
   );
 }
 
-/** Per vaardigheid: toont het gekozen/herkende icoon en laat je het wijzigen of uitzetten. */
-export function SkillPills({ skills, show, overrides, onOverride }: {
-  skills: string[]; show: boolean; overrides: Record<string, string>; onOverride: (key: string, value: string | null) => void;
+/**
+ * De toegevoegde vaardigheden als verwijderbare tags. Met iconen aan opent een klik op de tag de icoonkeuze
+ * (automatisch, eigen icoon of geen icoon); met iconen uit zijn het gewone tags en blijven eerdere keuzes per vaardigheid bewaard.
+ */
+export function SkillPills({ skills, show, overrides, onOverride, onRemove }: {
+  skills: string[]; show: boolean; overrides: Record<string, string>; onOverride: (key: string, value: string | null) => void; onRemove: (index: number) => void;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   if (!skills.length) return null;
-  // iconen uit (globaal, voor dit onderdeel of door de weergave 'Tekst'): keuzes per vaardigheid blijven bewaard maar gelden niet
-  if (!show) return <p className="field-hint" data-testid="pills-off">Iconen zijn uitgezet; keuzes per vaardigheid blijven bewaard.</p>;
   return (
     <div className="pills" data-testid="skill-pills">
-      {skills.map((sk) => {
+      {skills.map((sk, i) => {
         const key = compact(sk);
         const icon = resolveSkillIcon(sk, show, overrides);
+        const inner = <>{icon ? <TechIcon id={icon} /> : show ? <span className="no-icon" /> : null}{sk}</>;
         return (
-          <div className="pill-wrap" key={sk}>
-            <button type="button" className={`pill ${icon ? 'has-icon' : ''} ${overrides[key] ? 'custom' : ''}`} data-testid={`skill-pill-${key}`}
-              title="Icoon kiezen" onClick={() => setOpenKey(openKey === key ? null : key)}>
-              {icon ? <TechIcon id={icon} /> : <span className="no-icon" />}{sk}
+          <div className={`pill-wrap ${overrides[key] && show ? 'custom' : ''}`} key={`${key}-${i}`}>
+            {show ? (
+              <button type="button" className={`pill ${icon ? 'has-icon' : ''}`} data-testid={`skill-pill-${key}`} title="Icoon kiezen"
+                onClick={() => setOpenKey(openKey === key ? null : key)}>{inner}</button>
+            ) : (
+              <span className="pill static" data-testid={`skill-pill-${key}`}>{inner}</span>
+            )}
+            <button type="button" className="pill-x" aria-label={`${sk} verwijderen`} data-testid={`skill-pill-x-${key}`} onClick={() => onRemove(i)}>
+              <Icon name="close" size={12} />
             </button>
-            {openKey === key && (
+            {show && openKey === key && (
               <IconPicker current={overrides[key] && overrides[key] !== 'none' ? overrides[key] : null} onClose={() => setOpenKey(null)}
                 onPick={(v) => { onOverride(key, v === 'auto' ? null : v); setOpenKey(null); }} />
             )}

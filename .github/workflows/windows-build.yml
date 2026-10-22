@@ -1,17 +1,26 @@
 name: Windows build
 
-# Builds the Windows installer on a hosted Windows runner and prepares a DRAFT, PRE-RELEASE on GitHub.
-# It never publishes a release by itself and never claims verification: the release notes only state
-# the outcome of the automated checks, and the maintainer decides when to publish.
+# Builds the Windows installer on a hosted Windows runner, verifies that every part of the release belongs to the
+# same build, and prepares a DRAFT release on GitHub. It never publishes anything by itself: publishing is a manual
+# decision by the maintainer after reading the verification summary (see docs/RELEASING.md).
 #
-# Trigger: push a version tag (for example v3.0.1), or run it manually from the Actions tab.
-# Hosted Windows runners need available GitHub Actions minutes. If no runner can be started
-# (for example because of billing limits) the run fails before any step; do not re-run it repeatedly.
+# Triggers (never a plain branch push):
+#   - push a version tag such as v3.1.0 (draft PRE-RELEASE = release candidate, kept out of the stable update channel)
+#   - run it manually from the Actions tab; with "stable" ticked it prepares a draft that is NOT marked as pre-release,
+#     but only when every check below passed and the tag equals the version in package.json
+#
+# Hosted Windows runners need available GitHub Actions minutes. If no runner can be started (for example because of
+# billing limits) the run fails before any step; do not re-run it repeatedly.
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      stable:
+        description: 'Prepare a draft that is not marked as pre-release (only if all checks pass)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,62 +28,122 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     outputs:
       smoke: ${{ steps.smoke.outcome }}
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Source, tag and version
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Commit: $GITHUB_SHA  Version: $VERSION  Ref: $GITHUB_REF"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+              echo "::error::Tag ${GITHUB_REF_NAME} does not match the version in package.json (v${VERSION}). Nothing is built."
+              exit 1
+            fi
+            # a tag must point at a commit that is on the default branch (reviewed through the pull request ruleset)
+            git fetch origin main --depth=1000 || true
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "::error::Tag ${GITHUB_REF_NAME} points at a commit that is not on main. Merge the pull request first, then tag."
+              exit 1
+            fi
+          fi
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run dist
+      - name: Verify the package (icon, version information, update metadata)
+        run: node scripts/verify-exe.mjs release
+      - name: Verify license files in the package
+        id: licenses
+        shell: bash
+        run: |
+          for f in LICENSE THIRD_PARTY_NOTICES.md licenses/npm-bundled.txt licenses/fonts-OFL-1.1.txt; do
+            test -f "release/win-unpacked/resources/$f" || { echo "::error::missing release/win-unpacked/resources/$f"; exit 1; }
+          done
+          echo "License files present."
       # The same end-to-end scenarios as on Linux, run against the packaged Windows app.
-      # A failure here does not stop the build, but it is recorded in the release notes.
+      # A failure does not stop the build, but it is recorded and blocks a "stable" draft.
       - id: smoke
         continue-on-error: true
         run: node e2e/run.mjs
         env:
           CV_STUDIO_EXE: ${{ github.workspace }}\release\win-unpacked\CV Studio.exe
-      - name: Checksums
-        shell: pwsh
+      - name: Checksums and release manifest
+        shell: bash
+        env:
+          SMOKE: ${{ steps.smoke.outcome }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          Get-ChildItem release\CV-Studio-Setup-*.exe | ForEach-Object {
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$hash  $($_.Name)" | Out-File -Append -Encoding ascii release\SHA256SUMS.txt
-          }
+          cd release
+          INSTALLER="CV-Studio-Setup-${{ steps.meta.outputs.version }}.exe"
+          SHA256=$(sha256sum "$INSTALLER" | cut -d' ' -f1)
+          echo "$SHA256  $INSTALLER" > SHA256SUMS.txt
+          cd ..
+          TAG=""; [ "$REF_TYPE" = "tag" ] && TAG="$REF_NAME"
+          node -e "
+            const fs=require('fs'),c=require('crypto');
+            const f='release/$INSTALLER';
+            const m={version:'${{ steps.meta.outputs.version }}',tag:'$TAG',commit:process.env.GITHUB_SHA,installer:'$INSTALLER',
+              sha256:'$SHA256',sha512:c.createHash('sha512').update(fs.readFileSync(f)).digest('base64'),
+              checks:{licenses:true,verifyExe:true,smoke:process.env.SMOKE},builtAt:new Date().toISOString()};
+            fs.writeFileSync('release/release-manifest.json',JSON.stringify(m,null,2));"
+      - name: Verify that all release files belong to the same build
+        shell: bash
+        run: node scripts/verify-release-assets.mjs release --sha "$GITHUB_SHA" ${{ github.ref_type == 'tag' && format('--tag {0}', github.ref_name) || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: CV-Studio-Windows
           path: |
             release/CV-Studio-Setup-*.exe
+            release/CV-Studio-Setup-*.exe.blockmap
+            release/latest.yml
             release/SHA256SUMS.txt
+            release/release-manifest.json
 
   draft-release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.stable)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: CV-Studio-Windows
-      - name: Create draft pre-release
+          path: assets
+      - name: Re-verify the downloaded files
+        run: node scripts/verify-release-assets.mjs assets --sha "$GITHUB_SHA" ${{ github.ref_type == 'tag' && format('--tag {0}', github.ref_name) || '' }}
+      - name: Create the draft release (never published automatically)
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.build.outputs.version) }}
           SMOKE: ${{ needs.build.outputs.smoke }}
+          WANT_STABLE: ${{ github.event_name == 'workflow_dispatch' && inputs.stable }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "A release for $TAG already exists. Not touching it; the installer is available as a workflow artifact."
             exit 0
           fi
+          PRE="--prerelease"
+          # A stable draft needs: stable version number (no hyphen), a passed smoke test, and an explicit request.
+          if [ "$WANT_STABLE" = "true" ] && [ "$SMOKE" = "success" ] && ! echo "$VERSION" | grep -q -- '-'; then PRE=""; fi
           if [ "$SMOKE" = "success" ]; then
-            CHECKS="Automated Windows checks (unit tests and end-to-end scenarios against the packaged app): passed."
+            CHECKS="Automated Windows checks (unit tests, package verification and end-to-end scenarios against the packaged app): passed."
           else
             CHECKS="Automated Windows end-to-end scenarios against the packaged app did not pass (result: $SMOKE). Treat this build as unverified."
           fi
@@ -83,9 +152,11 @@ jobs:
             echo
             echo "$CHECKS"
             echo
-            echo "Installation: download the installer, run it and open CV Studio. The installer is not code-signed, so Windows SmartScreen may show a warning (More info, then Run anyway)."
+            echo "Verified for this build: tag matches package.json, commit is on main, installer name and version, SHA-256 and SHA-512 in SHA256SUMS.txt, latest.yml and release-manifest.json, icon and version information of the executable, license files in the package."
             echo
-            echo "SHA-256 checksums are in SHA256SUMS.txt."
+            echo "Installation: download the installer, run it and open CV Studio. The installer is not code-signed, so Windows SmartScreen may show a warning (More info, then Run anyway). Check the installer against the SHA-256 in SHA256SUMS.txt."
+            echo
+            echo "Updates: this build can notify you about newer versions, but automatic installation stays off until the installers are code-signed (see docs/UPDATES.md)."
           } > notes.md
-          gh release create "$TAG" CV-Studio-Setup-*.exe SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" --title "CV Studio ${TAG#v}" --notes-file notes.md --draft --prerelease
+          gh release create "$TAG" assets/CV-Studio-Setup-*.exe assets/CV-Studio-Setup-*.exe.blockmap assets/latest.yml assets/SHA256SUMS.txt assets/release-manifest.json \
+            --repo "$GITHUB_REPOSITORY" --title "CV Studio ${TAG#v}" --notes-file notes.md --draft $PRE

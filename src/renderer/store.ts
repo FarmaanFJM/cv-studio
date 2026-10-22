@@ -10,6 +10,7 @@ export function useCvStore() {
   const latest = useRef<AppState | null>(null);
   const dirty = useRef(false);
   const timer = useRef<number | undefined>(undefined);
+  const inflight = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     api.loadState().then((s) => { latest.current = s; setState(s); });
@@ -19,11 +20,22 @@ export function useCvStore() {
     if (!latest.current || !dirty.current) return;
     dirty.current = false;
     setStatus('saving');
-    try {
-      const r = await api.saveState(latest.current);
-      setStatus(r.ok ? 'saved' : 'error');
-    } catch { setStatus('error'); }
+    const run = (async () => {
+      try {
+        const r = await api.saveState(latest.current!);
+        setStatus(r.ok ? 'saved' : 'error');
+      } catch { setStatus('error'); }
+    })();
+    inflight.current = run;
+    await run;
   }, []);
+
+  /** Schrijft direct alle openstaande wijzigingen weg en wacht tot het klaar is (bijv. vóór het herstarten voor een update). */
+  const saveNow = useCallback(async () => {
+    window.clearTimeout(timer.current);
+    await flush();
+    await inflight.current;
+  }, [flush]);
 
   const commit = useCallback((next: AppState) => {
     latest.current = next;
@@ -91,5 +103,5 @@ export function useCvStore() {
     commit({ ...s, swatches: [...s.swatches, hex].slice(-24) });
   }, [commit]);
 
-  return { state, cv, status, updateCv, setActive, addCv, duplicate, importCv, removeCv, addSwatch };
+  return { state, cv, status, saveNow, updateCv, setActive, addCv, duplicate, importCv, removeCv, addSwatch };
 }
