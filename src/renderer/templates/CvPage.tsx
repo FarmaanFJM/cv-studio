@@ -1,7 +1,8 @@
 import React, { forwardRef } from 'react';
 import { CV, FONTS, Section } from '../../shared/model';
 import { readableOn } from '../../shared/color';
-import { ContactList, PhotoView, SectionBlock, contactRows } from './blocks';
+import { ContactList, PhotoView, SectionBlock, SectionFooterNote, contactRows } from './blocks';
+import { hasFooter } from '../../shared/footer';
 
 interface Props {
   cv: CV;
@@ -55,9 +56,10 @@ export const CvPage = forwardRef<HTMLDivElement, Props>(function CvPage({ cv, pl
         <div className="min-top">
           <div className="min-id">
             {nameBlock}
-            {rows.length > 0 && (
+            {(rows.length > 0 || (showContact && hasFooter(personal?.footer))) && (
               <div className="min-contact" data-sec={personal!.id} data-title={personal!.title} onClick={pickPersonal}>
                 <ContactList cv={cv} />
+                {showContact && <SectionFooterNote s={personal!} />}
               </div>
             )}
           </div>
@@ -81,7 +83,9 @@ export const CvPage = forwardRef<HTMLDivElement, Props>(function CvPage({ cv, pl
             <h1 className={!name && placeholders ? 'ph' : ''}>{name || (placeholders ? 'Jouw naam' : '')}</h1>
             {(title || placeholders) && <div className={`job-title ${!title ? 'ph' : ''}`}>{title || 'Functietitel'}</div>}
           </div>
-          {showContact && contactRows(cv).length > 0 && <div className="band-contact"><ContactList cv={cv} /></div>}
+          {showContact && (contactRows(cv).length > 0 || hasFooter(personal?.footer)) && (
+            <div className="band-contact"><ContactList cv={cv} />{personal && <SectionFooterNote s={personal} />}</div>
+          )}
         </header>
         <div className={`hbody ${side.length ? '' : 'no-side'}`}>
           {side.length > 0 && <aside className="col-side" data-region="supplementary">{blocks(side)}</aside>}

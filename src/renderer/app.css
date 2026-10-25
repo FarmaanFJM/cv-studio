@@ -452,3 +452,7 @@ html.print-mode .cv-page { overflow: hidden; }
 .group-body.flat { margin-left: 0; max-width: 520px; }
 .groups + .btn-row, .groups ~ .btn-row { padding-top: var(--s-2); }
 .skill-input { display: flex; flex-direction: column; gap: 6px; }
+
+/* afsluitende tekst per onderdeel: geen eigen kader, alleen de bestaande veld- en knopstijlen */
+.footer-edit { display: flex; flex-direction: column; gap: var(--s-2); }
+.footer-link-form { display: flex; flex-direction: column; gap: var(--s-3); max-width: 420px; }

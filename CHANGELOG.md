@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.0 - Optional closing text per section
+New optional feature. The data format is unchanged (still v4): `footer` is an optional field on every section, so existing CVs and 3.0.x/3.1.0 files open exactly as before and nothing is added to them.
+
+- **Afsluitende tekst** on every section type (Contact, Over mij, Projecten, Opleiding, Werkervaring, Vaardigheden, Talen and custom sections). It belongs to the section as a whole, is implemented once on the shared section model (`SectionBase.footer`) and is rendered by the shared section block, below the section's last entry. Empty by default, no placeholder in the CV or PDF, no space reserved when empty.
+- **Editor:** a quiet `+ Afsluitende tekst` action at the bottom of every expanded section opens one compact text field. `Link` turns the selected text (or the text under the cursor, or new text) into a clickable link through a small inline form (link text + web address); `Verwijderen` removes the text without touching the section. No toolbar, no Markdown, no extra containers.
+- **Links:** stored as ranges in the text plus a URL, never as HTML. Only `http://` and `https://` are accepted (the editor adds `https://` to `github.com/...`); `javascript:`, `data:`, `file:`, credentials in URLs and other schemes are rejected in the editor and again when data is loaded or imported. Links are real link annotations in the exported PDF and the text stays selectable.
+- **Layout:** slightly smaller, muted text with a restrained underlined link in the template accent (white on the coloured sidebar and header band). Line breaks are kept, long text wraps. A section with only a closing text is still shown. The text counts towards the one-page A4 check, so too much text shows the existing overflow warning and blocks export; nothing is truncated or scaled.
+- Limits: 600 characters and 12 links per section.
+
 ## 3.1.0 - Simpler editor, branding, desktop shell and update check
 This is a feature and UX release. The data format is unchanged (still v4). Existing CVs open exactly as before, with the changes listed under "Compatibility".
 
