@@ -6,6 +6,7 @@ import { Icon } from '../icons';
 import { FitReport } from '../layout';
 import { SummaButton, SummaField, SummaMenu, SummaSectionCard, SummaTextInput, SummaToggle } from '../ui';
 import { SectionEditor } from './SectionEditors';
+import { SectionFooterEditor } from './FooterEditor';
 
 interface Props {
   cv: CV;
@@ -190,6 +191,11 @@ export function SectionList({ cv, update, fit, openId, setOpenId, onPlaced }: Pr
           <SummaTextInput name="sec-title" value={s.title} onChange={(v) => update((c) => { const t = c.sections.find((x) => x.id === s.id); if (t) t.title = v; })} />
         </SummaField>
         <SectionEditor s={s} cv={cv} update={update} />
+        <SectionFooterEditor footer={s.footer} onChange={(f) => update((c) => {
+          const t = c.sections.find((x) => x.id === s.id);
+          if (!t) return;
+          if (f) t.footer = f; else delete t.footer;
+        })} />
       </SummaSectionCard>
     );
   };

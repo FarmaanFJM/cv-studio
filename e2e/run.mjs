@@ -1807,6 +1807,306 @@ await scenario('49. Vaardighedenlayout: rechthoekige groepen zonder geleidelijn,
   await page.keyboard.press('Escape');
 });
 
+
+// ================= v3.2.0: afsluitende tekst per onderdeel =================
+const FOOT = 'Meer projecten bekijken op GitHub';
+const footerOf = (type) => page.locator(`.cv-page .sec-${type} .sec-footer`);
+const addFooter = async (type, text, linkWord, url) => {
+  const card = await open(page, type);
+  if (await card.getByTestId('footer-add').count()) await card.getByTestId('footer-add').click();
+  await card.getByTestId('footer-text').fill(text);
+  if (linkWord) {
+    const at = text.indexOf(linkWord);
+    await card.getByTestId('footer-text').evaluate((el, [a, b]) => { el.focus(); el.setSelectionRange(a, b); }, [at, at + linkWord.length]);
+    await card.getByTestId('footer-link').click();
+    await card.getByTestId('footer-link-url').fill(url);
+    await card.getByTestId('footer-link-save').click();
+  }
+  return card;
+};
+const pdfInfo = async (file) => {
+  const bytes = fs.readFileSync(file);
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true }).promise;
+  const pg = await pdf.getPage(1);
+  const text = (await pg.getTextContent()).items.map((i) => i.str).join(' ');
+  const links = (await pg.getAnnotations()).filter((a) => a.subtype === 'Link').map((a) => ({ url: a.url, rect: a.rect }));
+  // ruwe controle op echte /Link-annotaties met /URI-actie in het bestand zelf
+  const doc = await PDFDocument.load(bytes);
+  const raw = doc.getPage(0).node.Annots()?.asArray().map((r) => doc.context.lookup(r)).map((a) => String(a)).filter((a) => /\/Subtype\s*\/Link/.test(a)).length ?? 0;
+  return { pages: pdf.numPages, text, links, rawLinks: raw };
+};
+
+await scenario('50. Afsluitende tekst: leeg standaard, geen ruimte, geen placeholder, niets automatisch ingevuld', async () => {
+  await newCv('Slotnotitie');
+  await page.getByTestId('tab-layout').click();
+  await page.getByTestId('tpl-sidebar').click();
+  await page.getByTestId('tab-sections').click();
+  const proj = await open(page, 'projects');
+  await proj.getByTestId('proj-add').click();
+  await proj.getByTestId('proj-0-name').fill('STEMM');
+  await proj.getByTestId('proj-add').click();
+  await proj.getByTestId('proj-1-name').fill('QuCT');
+  assert(await page.locator('.cv-page .sec-footer').count() === 0, 'footer zonder invoer zichtbaar');
+  const h0 = await page.locator('.cv-page .sec-projects').evaluate((e) => e.getBoundingClientRect().height);
+  // elk uitgeklapt onderdeel heeft dezelfde stille actie
+  for (const t of ['personal', 'profile', 'projects', 'education', 'experience', 'skills', 'languages']) {
+    const c = await open(page, t);
+    assert(await c.getByTestId('footer-add').count() === 1, `actie ontbreekt in ${t}`);
+    assert((await c.getByTestId('footer-add').innerText()).trim() === 'Afsluitende tekst', 'label: ' + await c.getByTestId('footer-add').innerText());
+    assert(await c.getByTestId('footer-text').count() === 0, 'veld standaard open in ' + t);
+    await c.getByTestId(`sec-${t}-expand`).click();
+  }
+  await page.getByTestId('add-section').click();
+  await page.getByTestId('add-extra').click();
+  assert(await page.locator('[data-testid="sec-custom"]').last().getByTestId('footer-add').count() === 1, 'actie ontbreekt in eigen onderdeel');
+  await page.locator('[data-testid="sec-custom"]').last().getByTestId('sec-custom-expand').click();
+  // openen en weer sluiten zonder tekst verandert niets
+  const p2 = await open(page, 'projects');
+  await p2.getByTestId('footer-add').click();
+  assert(await p2.getByTestId('footer-text').inputValue() === '', 'veld niet leeg');
+  assert(await page.locator('.cv-page .sec-footer').count() === 0, 'lege footer getoond');
+  assert(!/Afsluitende|Meer projecten|GitHub/.test(await page.locator('.cv-page').innerText()), 'placeholder in cv');
+  await page.screenshot({ path: path.join(out, 'footer-1-leeg-veld.png') });
+  await page.getByTestId('footer-text').blur();
+  const h1 = await page.locator('.cv-page .sec-projects').evaluate((e) => e.getBoundingClientRect().height);
+  assert(Math.abs(h1 - h0) < 0.5, `hoogte veranderd door leeg veld: ${h0} -> ${h1}`);
+});
+
+await scenario('51. Afsluitende tekst met link (Projecten): klikbaar label, geen kale URL, bewerken en verwijderen', async () => {
+  const card = await addFooter('projects', FOOT, 'GitHub', 'github.com/voorbeeld');
+  const f = footerOf('projects');
+  assert((await f.innerText()) === FOOT, 'tekst: ' + await f.innerText());
+  const a = f.locator('a');
+  assert(await a.count() === 1 && (await a.innerText()) === 'GitHub' && (await a.getAttribute('href')) === 'https://github.com/voorbeeld', 'link: ' + await f.innerHTML());
+  assert(!(await f.innerText()).includes('https://'), 'kale URL zichtbaar');
+  // onder het laatste item, boven het volgende onderdeel
+  const geo = await page.evaluate(() => {
+    const sec = document.querySelector('.cv-page .sec-projects'); const items = sec.querySelectorAll('.item'); const foot = sec.querySelector('.sec-footer');
+    const last = items[items.length - 1].getBoundingClientRect(), fr = foot.getBoundingClientRect(), sr = sec.getBoundingClientRect();
+    const next = sec.nextElementSibling?.getBoundingClientRect();
+    const cs = getComputedStyle(foot);
+    return { gap: fr.top - last.bottom, inside: fr.bottom <= sr.bottom + 0.5, nextOk: !next || next.top >= fr.bottom, fs: parseFloat(cs.fontSize), body: parseFloat(getComputedStyle(sec).fontSize), border: cs.borderTopWidth, bg: cs.backgroundColor, deco: foot.querySelector('svg') !== null };
+  });
+  assert(geo.gap >= 0 && geo.gap < 12, 'afstand tot laatste item: ' + geo.gap);
+  assert(geo.inside && geo.nextOk, 'overlap met volgend onderdeel');
+  assert(geo.fs < geo.body && geo.border === '0px' && geo.bg === 'rgba(0, 0, 0, 0)' && !geo.deco, 'stijl: ' + JSON.stringify(geo));
+  // bewerken: cursor in de link -> "Link bewerken"
+  await card.getByTestId('footer-text').evaluate((el) => { el.focus(); el.setSelectionRange(29, 29); });
+  await page.waitForFunction(() => /Link bewerken/.test(document.querySelector('[data-testid="footer-link"]')?.textContent ?? ''));
+  await card.getByTestId('footer-link').click();
+  assert(await card.getByTestId('footer-link-label').inputValue() === 'GitHub', 'linktekst niet voorgevuld');
+  assert(await card.getByTestId('footer-link-url').inputValue() === 'https://github.com/voorbeeld', 'url niet voorgevuld');
+  await card.getByTestId('footer-link-url').fill('https://github.com/anders');
+  await card.getByTestId('footer-link-url').press('Enter');
+  assert((await footerOf('projects').locator('a').getAttribute('href')) === 'https://github.com/anders', 'link niet bijgewerkt');
+  // tekst ervoor typen: de link schuift mee
+  await card.getByTestId('footer-text').evaluate((el) => { el.focus(); el.setSelectionRange(0, 0); });
+  await page.keyboard.type('Zie ook: ');
+  assert((await footerOf('projects').locator('a').innerText()) === 'GitHub', 'link schoof niet mee');
+  await page.screenshot({ path: path.join(out, 'footer-2-editor-met-link.png') });
+  // link verwijderen laat de tekst staan
+  await card.getByTestId('footer-text').evaluate((el) => { el.focus(); el.setSelectionRange(el.value.length - 2, el.value.length - 2); });
+  await card.getByTestId('footer-link').click();
+  await card.getByTestId('footer-link-remove').click();
+  assert(await footerOf('projects').locator('a').count() === 0 && (await footerOf('projects').innerText()).includes('GitHub'), 'link verwijderen');
+  // opnieuw een link over de hele zin
+  await card.getByTestId('footer-text').fill(FOOT);
+  await card.getByTestId('footer-text').evaluate((el) => { el.focus(); el.setSelectionRange(0, el.value.length); });
+  await card.getByTestId('footer-link').click();
+  await card.getByTestId('footer-link-url').fill('https://github.com/voorbeeld');
+  await card.getByTestId('footer-link-save').click();
+  assert((await footerOf('projects').locator('a').innerText()) === FOOT, 'hele zin niet klikbaar');
+  await card.getByTestId('footer-text').fill('Totaal andere tekst');
+  assert(await footerOf('projects').locator('a').count() === 0, 'link bleef na vervangen tekst');
+  await addFooter('projects', FOOT, 'GitHub', 'https://github.com/voorbeeld');
+});
+
+await scenario('52. Onveilige links worden geweigerd in de editor', async () => {
+  const card = await open(page, 'projects');
+  await card.getByTestId('footer-text').evaluate((el) => { el.focus(); el.setSelectionRange(29, 29); });
+  await card.getByTestId('footer-link').click();
+  for (const bad of ['javascript:alert(1)', 'JAVASCRIPT:alert(1)', 'data:text/html,x', 'file:///etc/passwd', 'vbscript:x', 'geen adres']) {
+    await card.getByTestId('footer-link-url').fill(bad);
+    await card.getByTestId('footer-link-save').click();
+    assert(await card.locator('.field-error').count() === 1, 'geen foutmelding voor ' + bad);
+    assert((await footerOf('projects').locator('a').getAttribute('href')) === 'https://github.com/voorbeeld', 'onveilige link doorgelaten: ' + bad);
+  }
+  await card.getByTestId('footer-link-url').press('Escape');
+  assert(await card.getByTestId('footer-link-url').count() === 0, 'Escape sluit het linkformulier niet');
+});
+
+await scenario('53. Vaardigheden, Opleiding en eigen onderdeel: afsluitende tekst, ook zonder gewone inhoud', async () => {
+  const sk = await open(page, 'skills');
+  await sk.getByTestId('skill-add').click();
+  await sk.getByTestId('skill-0-name').fill('Programmeren');
+  await sk.getByTestId('skill-0-list').fill('TypeScript, Python');
+  await sk.getByTestId('skill-0-list').press('Enter');
+  await addFooter('skills', 'Meer technische projecten en gebruikte tools op GitHub.', 'GitHub', 'https://github.com/voorbeeld');
+  assert((await footerOf('skills').innerText()) === 'Meer technische projecten en gebruikte tools op GitHub.', 'skills-footer');
+  const edu = await open(page, 'education');
+  await edu.getByTestId('edu-add').click();
+  await edu.getByTestId('edu-0-degree').fill('HBO Informatica');
+  await addFooter('education', 'Relevante cursussen en certificaten beschikbaar op aanvraag.');
+  assert(await footerOf('education').locator('a').count() === 0, 'onverwachte link');
+  const custom = page.locator('[data-testid="sec-custom"]').last();
+  if (!(await custom.locator('.card-body').count())) await custom.getByTestId('sec-custom-expand').click();
+  await custom.getByTestId('footer-add').click();
+  await custom.getByTestId('footer-text').fill('Portfolio en aanvullende informatie: mijnwebsite.nl');
+  // een onderdeel zonder gewone inhoud toont toch zijn expliciete afsluitende tekst
+  assert((await page.locator('.cv-page .sec-custom .sec-footer').innerText()).includes('mijnwebsite.nl'), 'footer bij leeg onderdeel ontbreekt');
+  const exp = await open(page, 'experience');
+  assert(await page.locator('.cv-page .sec-experience').count() === 0, 'werkervaring zonder footer zou verborgen zijn');
+  await addFooter('experience', 'Referenties beschikbaar op aanvraag.');
+  assert(await page.locator('.cv-page .sec-experience').count() === 1, 'footer-only werkervaring niet getoond');
+  await exp.getByTestId('footer-remove').click();
+  assert(await page.locator('.cv-page .sec-experience').count() === 0, 'verwijderen haalt onderdeel niet weg');
+  assert(await exp.getByTestId('footer-add').count() === 1, 'actie komt niet terug na verwijderen');
+  assert(await page.getByTestId('sec-experience').count() === 1, 'onderdeel zelf is verdwenen');
+  // wrapping over meerdere regels, regeleinden behouden
+  await addFooter('education', 'Eerste regel van de slotnotitie.\nTweede regel, een stuk langer zodat deze zeker over meerdere regels in de kolom moet afbreken en niet buiten de pagina valt.');
+  const lines = await footerOf('education').evaluate((e) => Math.round(e.offsetHeight / parseFloat(getComputedStyle(e).lineHeight)));
+  assert(lines >= 3, 'geen meerregelige weergave: ' + lines);
+  const inBounds = await page.evaluate(() => { const r = document.querySelector('.cv-page').getBoundingClientRect(); return [...document.querySelectorAll('.cv-page .sec-footer')].every((f) => { const b = f.getBoundingClientRect(); return b.left >= r.left && b.right <= r.right; }); });
+  assert(inBounds, 'footer valt buiten de pagina');
+  await saved(page);
+});
+
+await scenario('54. Opslaan en heropenen, herordenen, verbergen, sjablonen, kopie en JSON-roundtrip', async () => {
+  await saved(page);
+  await app.close();
+  ({ app, page } = await launch());
+  assert((await footerOf('projects').innerText()) === FOOT, 'footer niet hersteld na herstart');
+  assert((await footerOf('projects').locator('a').getAttribute('href')) === 'https://github.com/voorbeeld', 'link niet hersteld');
+  // verplaatsen: footer gaat mee naar de aanvullende kolom
+  await moveTo(page, 'projects', 'supplementary');
+  assert(await page.locator('.col-side .sec-projects .sec-footer').count() === 1, 'footer ging niet mee naar aanvullend');
+  await moveTo(page, 'projects', 'primary');
+  assert(await page.locator('.col-main .sec-projects .sec-footer').count() === 1, 'footer ging niet mee terug');
+  await page.getByTestId('sec-projects-up').count();
+  // verbergen
+  await page.getByTestId('sec-projects-toggle').click();
+  assert(await page.locator('.cv-page .sec-projects, .cv-page :text("Meer projecten")').count() === 0, 'footer van verborgen onderdeel zichtbaar');
+  await page.getByTestId('sec-projects-toggle').click();
+  assert(await footerOf('projects').count() === 1, 'footer niet terug na tonen');
+  // alle sjablonen
+  for (const tpl of ['header', 'minimal', 'sidebar']) {
+    await page.getByTestId('tab-layout').click();
+    await page.getByTestId(`tpl-${tpl}`).click();
+    await page.getByTestId('tab-sections').click();
+    assert((await footerOf('projects').innerText()) === FOOT && await footerOf('projects').locator('a').count() === 1, `footer verdwenen in ${tpl}`);
+    await page.screenshot({ path: path.join(out, `footer-tpl-${tpl}.png`) });
+  }
+  // kopie van het cv
+  await menuAction(page, 'cv-duplicate');
+  await page.getByTestId('prompt-input').fill('Slotnotitie kopie');
+  await page.getByTestId('prompt-ok').click();
+  await page.waitForFunction(() => document.querySelector('[data-testid="version-select-value"]')?.textContent === 'Slotnotitie kopie');
+  assert((await footerOf('projects').innerText()) === FOOT && await footerOf('skills').count() === 1, 'footer niet in kopie');
+  // JSON-export en import
+  await menuAction(page, 'json-export');
+  await page.waitForSelector('[data-testid="toast"]');
+  const exported = JSON.parse(fs.readFileSync(path.join(out, 'Slotnotitie kopie.json'), 'utf8'));
+  const cvj = exported.cv ?? exported;
+  const pj = cvj.sections.find((x) => x.type === 'projects');
+  assert(pj.footer.text === FOOT && pj.footer.links[0].url === 'https://github.com/voorbeeld' && FOOT.slice(pj.footer.links[0].start, pj.footer.links[0].end) === 'GitHub', 'export mist footer: ' + JSON.stringify(pj.footer));
+  // onbetrouwbare import: onveilige link verdwijnt, veilige blijft
+  pj.footer.links.push({ start: 0, end: 4, url: 'javascript:alert(1)' });
+  pj.footer.text += ' <b>vet</b>';
+  cvj.name = 'Footerimport';
+  fs.writeFileSync(path.join(out, 'footer-import.json'), JSON.stringify(exported));
+  await app.close();
+  ({ app, page } = await launch({ CV_STUDIO_TEST_IMPORT: path.join(out, 'footer-import.json') }));
+  await menuAction(page, 'json-import');
+  await page.waitForFunction(() => /geïmporteerd/.test(document.querySelector('[data-testid="version-select-value"]')?.textContent ?? ''));
+  const f = footerOf('projects');
+  assert(await f.locator('a').count() === 1 && (await f.locator('a').getAttribute('href')) === 'https://github.com/voorbeeld', 'import: links ' + await f.innerHTML());
+  assert((await f.innerText()).includes('<b>vet</b>') && await f.locator('b').count() === 0, 'import: HTML niet als tekst behandeld');
+  assert(!(await page.locator('.cv-page').innerHTML()).includes('javascript:'), 'import: javascript: in DOM');
+});
+
+await scenario('55. PDF: footer zichtbaar, tekst selecteerbaar, echte link-annotaties, alle drie de sjablonen', async () => {
+  await pickCv(page, 'Slotnotitie');
+  await page.waitForFunction(() => !document.querySelector('[data-testid="overflow-banner"]'));
+  await page.getByTestId('tab-sections').click();
+  for (const tpl of ['sidebar', 'header', 'minimal']) {
+    await page.getByTestId('tab-layout').click();
+    await page.getByTestId(`tpl-${tpl}`).click();
+    await page.getByTestId('tab-sections').click();
+    assert(!(await page.getByTestId('export-pdf').isDisabled()), `export geblokkeerd in ${tpl}`);
+    await page.getByTestId('export-pdf').click();
+    await page.waitForFunction(() => /1 pagina/.test(document.querySelector('[data-testid="toast"]')?.textContent || ''));
+    const file = path.join(out, `footer-${tpl}.pdf`);
+    fs.copyFileSync(path.join(out, 'Slotnotitie.pdf'), file);
+    const info = await pdfInfo(file);
+    assert(info.pages === 1, `${tpl}: ${info.pages} pagina's`);
+    assert(info.text.includes('Meer projecten bekijken op GitHub') || /Meer projecten bekijken op\s+GitHub/.test(info.text), `${tpl}: footertekst niet selecteerbaar: ` + info.text.slice(0, 300));
+    assert(info.text.includes('Eerste regel van de slotnotitie'), `${tpl}: opleiding-footer ontbreekt`);
+    const gh = info.links.filter((l) => l.url === 'https://github.com/voorbeeld/' || l.url === 'https://github.com/voorbeeld');
+    assert(gh.length >= 1 && info.rawLinks >= 1, `${tpl}: geen link-annotatie (${JSON.stringify(info.links)})`);
+    assert(info.links.every((l) => /^https?:\/\//.test(l.url)), `${tpl}: annotatie met onveilig schema`);
+    // het annotatiegebied ligt over de woorden "GitHub" in de footer: vergelijk met de positie van de tekst
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(fs.readFileSync(file)), useSystemFonts: true }).promise;
+    const pg = await pdf.getPage(1);
+    const items = (await pg.getTextContent()).items.filter((i) => /GitHub/.test(i.str) && /Meer projecten/.test(i.str));
+    assert(items.length >= 1, `${tpl}: footertekstitem niet gevonden`);
+    const it = items[0];
+    const hit = gh.some((l) => l.rect[0] >= it.transform[4] - 2 && l.rect[2] <= it.transform[4] + it.width + 2 && l.rect[1] <= it.transform[5] + it.height && l.rect[3] >= it.transform[5] - 2);
+    assert(hit, `${tpl}: link ligt niet op de footertekst ${JSON.stringify(gh)} vs ${it.transform}/${it.width}`);
+    await page.evaluate(() => { document.querySelector('[data-testid="toast"]')?.click(); });
+  }
+  if (hasPdftoppm) {
+    execFileSync('pdftoppm', ['-png', '-r', '110', path.join(out, 'footer-sidebar.pdf'), path.join(out, 'footer-pdf-sidebar')]);
+    execFileSync('pdftoppm', ['-png', '-r', '110', path.join(out, 'footer-header.pdf'), path.join(out, 'footer-pdf-header')]);
+    execFileSync('pdftoppm', ['-png', '-r', '110', path.join(out, 'footer-minimal.pdf'), path.join(out, 'footer-pdf-minimal')]);
+  }
+});
+
+await scenario('56. Een te lange afsluitende tekst telt mee voor A4: melding met onderdeel, export geblokkeerd, niets afgekapt', async () => {
+  await page.getByTestId('tab-sections').click();
+  const long = Array.from({ length: 40 }, (_, i) => `Regel ${i} van een bewust veel te lange slotnotitie.`).join('\n').slice(0, 590);
+  const kinds = ['projects', 'education', 'skills', 'profile', 'languages', 'experience'];
+  for (const t of kinds) {
+    const c = await open(page, t);
+    if (await c.getByTestId('footer-add').count()) await c.getByTestId('footer-add').click();
+    await c.getByTestId('footer-text').fill(long);
+    await c.getByTestId(`sec-${t}-expand`).click();
+  }
+  await page.waitForSelector('[data-testid="overflow-banner"]');
+  const banner = await page.getByTestId('overflow-banner').innerText();
+  assert(/mm te lang/.test(banner), 'banner: ' + banner);
+  assert(await page.getByTestId('export-pdf').isDisabled(), 'export niet geblokkeerd');
+  const r = await page.evaluate((cv) => window.cvApi.exportPdf(cv), await currentCv(page));
+  assert(r.ok === false && /past niet op één A4/.test(r.error), 'main weigert niet: ' + JSON.stringify(r));
+  assert(await page.locator('.cv-page .sec-footer').count() >= 5, 'footer weggehaald of afgekapt');
+  assert((await page.locator('.cv-page .sec-footer').first().innerText()).length > 500, 'footer afgekapt');
+  assert(await page.locator('[data-testid^="sec-"] .usage.bad').count() >= 1, 'geen onderdeel aangewezen');
+  await page.screenshot({ path: path.join(out, 'footer-overflow.png') });
+  for (const t of kinds) { const c = await open(page, t); await c.getByTestId('footer-remove').click(); await c.getByTestId(`sec-${t}-expand`).click(); }
+  await page.waitForFunction(() => !document.querySelector('[data-testid="overflow-banner"]'));
+  assert(!(await page.getByTestId('export-pdf').isDisabled()), 'export blijft geblokkeerd');
+});
+
+await scenario('57. Toegankelijkheid (axe) van de afsluitende-tekst-editor, ook met linkformulier en foutmelding', async () => {
+  const card = await addFooter('skills', 'Meer op GitHub', 'GitHub', 'https://github.com/voorbeeld');
+  await card.getByTestId('footer-text').evaluate((el) => { el.focus(); el.setSelectionRange(0, 4); });
+  await card.getByTestId('footer-link').click();
+  await card.getByTestId('footer-link-url').fill('javascript:x');
+  await card.getByTestId('footer-link-save').click();
+  await page.evaluate(fs.readFileSync(path.join(root, 'node_modules/axe-core/axe.min.js'), 'utf8'));
+  const res = await page.evaluate(async () => (await window.axe.run({ include: [['.editor']] }, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } })).violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`));
+  assert(res.length === 0, 'axe: ' + res.join('\n'));
+  // toetsenbord: Tab bereikt tekstveld, link en verwijderen; focusring zichtbaar
+  await card.getByTestId('footer-link-url').press('Escape');
+  await card.getByTestId('footer-text').focus();
+  await page.keyboard.press('Tab');
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'footer-link', 'Tab bereikt Link niet: ' + await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120)));
+  await page.keyboard.press('Tab');
+  assert(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')) === 'footer-remove', 'Tab bereikt Verwijderen niet');
+  await page.screenshot({ path: path.join(out, 'footer-3-skills-editor.png') });
+});
+
 await app.close();
 fs.rmSync(userData, { recursive: true, force: true });
 const failed = results.filter((r) => !r[0]);

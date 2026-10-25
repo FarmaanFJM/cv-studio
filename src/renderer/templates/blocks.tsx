@@ -2,6 +2,7 @@ import React from 'react';
 import { CV, Photo, Section, SkillGroup } from '../../shared/model';
 import { ContactIcon, ContactIconSvg } from '../icons';
 import { effectiveTech } from '../../shared/tech';
+import { footerSegments, hasFooter, safeUrl } from '../../shared/footer';
 import { TechCtx, TechIcon, matchTech, resolveSkillIcon } from '../techIcons';
 
 /** Tekst met regeleinden; regels die met "-", "•" of "*" beginnen worden opsommingstekens. */
@@ -88,7 +89,21 @@ export function ContactList({ cv }: { cv: CV }) {
   );
 }
 
+/** Afsluitende tekst van een onderdeel: tekst met regeleinden en optionele links (alleen veilige http(s)-adressen, nooit HTML). */
+export function SectionFooterNote({ s }: { s: Section }) {
+  if (!hasFooter(s.footer)) return null;
+  return (
+    <div className="sec-footer" data-testid="sec-footer">
+      {footerSegments(s.footer).map((seg, i) => {
+        const url = seg.url ? safeUrl(seg.url) : null;
+        return url ? <a key={i} href={url} onClick={(e) => e.preventDefault()}>{seg.text}</a> : <React.Fragment key={i}>{seg.text}</React.Fragment>;
+      })}
+    </div>
+  );
+}
+
 export function hasContent(s: Section, cv: CV): boolean {
+  if (hasFooter(s.footer)) return true; // een expliciet ingevulde afsluitende tekst telt als inhoud
   switch (s.type) {
     case 'personal': return contactRows(cv).length > 0;
     case 'profile': return s.text.trim() !== '';
@@ -268,6 +283,7 @@ export function SectionBlock({ s, cv, onPick }: { s: Section; cv: CV; onPick?: (
       <section className={`sec sec-${s.type}`} data-sec={s.id} data-title={s.title} onClick={() => onPick?.(s.id)}>
         <h2>{s.title}</h2>
         <SectionBody s={s} cv={cv} />
+        <SectionFooterNote s={s} />
       </section>
     </TechCtx.Provider>
   );

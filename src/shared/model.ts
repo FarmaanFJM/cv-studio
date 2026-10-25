@@ -1,6 +1,8 @@
 // Datamodel (v2) + sanitizing. Pure TypeScript zodat main, renderer en tests het delen.
 import { isHex } from './color';
 import { effectiveTech } from './tech';
+import { SectionFooter, sanitizeFooter } from './footer';
+export type { SectionFooter, FooterLink } from './footer';
 
 export type TemplateId = 'sidebar' | 'header' | 'minimal';
 /**
@@ -64,7 +66,8 @@ export interface CustomItem { id: string; text: string; value: string }
 
 export type SectionType = 'personal' | 'profile' | 'experience' | 'education' | 'projects' | 'skills' | 'languages' | 'custom';
 
-interface SectionBase { id: string; title: string; visible: boolean; zone: Zone }
+/** `footer` = optionele afsluitende tekst onder het hele onderdeel (leeg/afwezig = niets tonen). */
+interface SectionBase { id: string; title: string; visible: boolean; zone: Zone; footer?: SectionFooter }
 export type Section =
   | (SectionBase & { type: 'personal' })
   | (SectionBase & { type: 'profile'; text: string })
@@ -373,6 +376,15 @@ export function migrateDisplay(legacy: unknown, iconsVisible: boolean): 'text' |
 }
 
 function sanitizeSection(raw: unknown, globalIcons = true): Section | null {
+  const sec = sanitizeSectionBody(raw, globalIcons);
+  if (sec) {
+    const footer = sanitizeFooter((raw as Record<string, unknown>).footer);
+    if (footer) sec.footer = footer;
+  }
+  return sec;
+}
+
+function sanitizeSectionBody(raw: unknown, globalIcons: boolean): Section | null {
   if (!isObj(raw)) return null;
   const type = raw.type;
   const known: SectionType[] = ['personal', 'profile', 'experience', 'education', 'projects', 'skills', 'languages', 'custom'];

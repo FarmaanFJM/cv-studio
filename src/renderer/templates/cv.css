@@ -45,6 +45,13 @@
 .cv-page .rich li { margin-top: 0.4mm; padding-left: 0.4mm; }
 .cv-page .rich > :first-child { margin-top: 0.8mm; }
 
+/* afsluitende tekst van een onderdeel: rustige slotnotitie, geen kader of scheiding */
+.cv-page .sec-footer { margin-top: calc(var(--item-gap) * 0.8); font-size: 0.92em; line-height: 1.35; white-space: pre-line; overflow-wrap: anywhere; color: color-mix(in srgb, var(--text) 85%, #fff); }
+.cv-page .sec-footer a { color: var(--heading); text-decoration: underline; text-decoration-thickness: 0.2mm; text-underline-offset: 0.45mm; }
+.t-sidebar .side .sec-footer, .t-header .band .sec-footer { color: color-mix(in srgb, var(--side-fg) 92%, transparent); }
+.t-sidebar .side .sec-footer a, .t-header .band .sec-footer a { color: var(--side-fg); }
+.t-header .band-contact .sec-footer { margin-top: 1.4mm; }
+
 /* datums links, inhoud rechts (alleen in de hoofdkolom) */
 .il-dates-left .col-main .item { display: grid; grid-template-columns: 30mm 1fr; column-gap: 4mm; }
 .il-dates-left .col-main .item .row { display: contents; }
